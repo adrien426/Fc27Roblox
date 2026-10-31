@@ -59,7 +59,7 @@ local function press(kind: string)
 end
 
 local function release(kind: string)
-	if kind == "sprint" then sprintHeld = false return end
+	if kind == "sprint" then sprintHeld = false; return end
 	local c = charging
 	if c and c.kind == kind then
 		charging = nil

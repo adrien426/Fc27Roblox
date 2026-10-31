@@ -92,20 +92,23 @@ local function homeOf(a: Actor): (number, number)
 end
 
 local function posOf(a: Actor): (number, number)
-	if not a.root then return homeOf(a) end
-	local x, y = toPitch(a.root.Position)
+	local r = a.root
+	if not r then return homeOf(a) end
+	local x, y = toPitch(r.Position)
 	return x, y
 end
 
 local function velOf(a: Actor): (number, number)
-	if not a.root then return 0, 0 end
-	local v = a.root.AssemblyLinearVelocity
+	local r = a.root
+	if not r then return 0, 0 end
+	local v = r.AssemblyLinearVelocity
 	return v.X / M, v.Z / M
 end
 
 local function facingOf(a: Actor): (number, number)
-	if not a.root then return dir[a.team], 0 end
-	local lv = a.root.CFrame.LookVector
+	local r = a.root
+	if not r then return dir[a.team], 0 end
+	local lv = r.CFrame.LookVector
 	local n = math.sqrt(lv.X * lv.X + lv.Z * lv.Z)
 	if n < 1e-3 then return dir[a.team], 0 end
 	return lv.X / n, lv.Z / n
@@ -304,7 +307,7 @@ local function doThrough(a: Actor, dx: number, dy: number)
 		local s = align * 10 + fwd * 0.3
 		if align > 0.2 and s > bs then best, bs = m, s end
 	end
-	if not best then doPass(a, dx, dy) return end
+	if not best then doPass(a, dx, dy); return end
 	local mx, my = posOf(best)
 	local mvx, mvy = velOf(best)
 	local tx = math.clamp(mx + dir[a.team] * rng:NextNumber(7, 11) + mvx * 0.4, 2, L - 2)
@@ -374,15 +377,15 @@ local function stunActor(a: Actor, t: number)
 end
 
 local function doTackle(a: Actor)
-	if not owner or owner.team == a.team or held then return end
+	local victim = owner
+	if not victim or victim.team == a.team or held then return end
 	local px, py = posOf(a)
-	local ox, oy = posOf(owner)
+	local ox, oy = posOf(victim)
 	if dist2(px, py, ox, oy) > 2.3 then
 		stunActor(a, 0.4)
 		return
 	end
 	if rng:NextNumber() < 0.55 then
-		local victim = owner :: Actor
 		stunActor(victim, 0.7)
 		victim.cool = 0.6
 		local fx, fy = facingOf(a)
@@ -549,11 +552,12 @@ end
 
 -- ---------- Computer players ----------
 local function moveBot(a: Actor, x: number, y: number, speed: number)
-	if not a.hum or not a.root then return end
+	local hum = a.hum
+	if not hum or not a.root then return end
 	local p = toWorld(math.clamp(x, -2, L + 2), math.clamp(y, -2, W + 2), 0)
-	a.hum.WalkSpeed = speed
+	hum.WalkSpeed = speed
 	if not a.lastTarget or (a.lastTarget - p).Magnitude > 1.5 or a.moveT <= 0 then
-		a.hum:MoveTo(p)
+		hum:MoveTo(p)
 		a.lastTarget = p
 		a.moveT = 1
 	end
@@ -607,9 +611,9 @@ local function botWithBall(a: Actor, dt: number)
 		end
 		if pressure < 3.5 or rng:NextNumber() < 0.15 then
 			local m = bestPass(a, d, 0, -0.1) or bestPass(a, nil, nil)
-			if m then passTo(a, m) return end
+			if m then passTo(a, m); return end
 		end
-		if rng:NextNumber() < 0.06 then doThrough(a, d, 0) return end
+		if rng:NextNumber() < 0.06 then doThrough(a, d, 0); return end
 	end
 	moveBot(a, x + d * 8, y + (W / 2 - y) * 0.15, 19)
 end
@@ -617,7 +621,7 @@ end
 local function keeper(a: Actor, dt: number)
 	local gx = ownGoalX(a.team)
 	local d = dir[a.team]
-	local x, y = posOf(a)
+	local _, y = posOf(a)
 	a.diveT = math.max(0, a.diveT - dt)
 	-- Shot coming: go for the point where it crosses the line
 	if shotBy and shotBy ~= a.team and (gx - ball.x) * ball.vx > 0 and math.abs(ball.vx) > 3 then
@@ -647,9 +651,9 @@ local function botThink(a: Actor, dt: number)
 	if not a.root or not a.hum then return end
 	a.moveT -= dt
 	local x, y = posOf(a)
-	if a.stun > 0 then moveBot(a, x, y, 0) return end
-	if owner == a then botWithBall(a, dt) return end
-	if a.role == "GK" then keeper(a, dt) return end
+	if a.stun > 0 then moveBot(a, x, y, 0); return end
+	if owner == a then botWithBall(a, dt); return end
+	if a.role == "GK" then keeper(a, dt); return end
 	local t = a.team
 	local d = dir[t]
 	local hx, hy = homeOf(a)
@@ -702,7 +706,7 @@ local function assignPlayer(pl: Player)
 	local pick = nil
 	for i = #actors, 1, -1 do
 		local a = actors[i]
-		if a.team == t and not a.player and a.role ~= "GK" then pick = a break end
+		if a.team == t and not a.player and a.role ~= "GK" then pick = a; break end
 	end
 	if not pick then return end
 	if pick.model then pick.model:Destroy() end
@@ -717,7 +721,8 @@ local function assignPlayer(pl: Player)
 		attach(pick, char)
 		Rig.dress(char, t, pick.num)
 		char:SetAttribute("Team", t)
-		if pick.hum then pick.hum.WalkSpeed = Config.WALK end
+		local hum = pick.hum
+		if hum then hum.WalkSpeed = Config.WALK end
 		local hx, hy = homeOf(pick)
 		place(pick, hx, hy)
 	end
@@ -738,7 +743,7 @@ Players.PlayerRemoving:Connect(function(pl)
 	a.player = nil
 	a.name = Config.NAMES[rng:NextInteger(1, #Config.NAMES)]
 	spawnBot(a)
-	if #Players:GetPlayers() <= 1 then phase = "waiting" publish() end
+	if #Players:GetPlayers() <= 1 then phase = "waiting"; publish() end
 end)
 
 Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, power: any)
@@ -752,7 +757,7 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	local n = math.sqrt(dx * dx + dz * dz)
 	local fx, fy
 	if n > 0.1 then fx, fy = dx / n, dz / n else fx, fy = facingOf(a) end
-	if kind == "tackle" then doTackle(a) return end
+	if kind == "tackle" then doTackle(a); return end
 	if owner ~= a or held then return end
 	if kind == "pass" then doPass(a, fx, fy)
 	elseif kind == "through" then doThrough(a, fx, fy)
