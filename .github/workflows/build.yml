@@ -26,7 +26,6 @@ jobs:
           chmod +x tools/rojo tools/luau-lsp
 
       - name: Check the Luau code
-        continue-on-error: true
         run: |
           tools/rojo sourcemap default.project.json -o sourcemap.json
           tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
