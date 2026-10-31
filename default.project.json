@@ -2,6 +2,9 @@
   "name": "Fc27Roblox",
   "tree": {
     "$className": "DataModel",
+    "Lighting": {
+      "$properties": { "Technology": "ShadowMap" }
+    },
     "ReplicatedStorage": {
       "Shared": { "$path": "src/shared" }
     },
