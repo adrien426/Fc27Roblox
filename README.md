@@ -47,23 +47,38 @@ Le code dans `src/` est la référence : c'est lui qui est enregistré sur Git. 
 
 ### Installation (une seule fois)
 
-1. Installe [Rokit](https://github.com/rojo-rbx/rokit), puis dans le dossier du dépôt lance `rokit install` (installe Rojo 7.4.4, la même version que GitHub).
+1. Installe [Rokit](https://github.com/rojo-rbx/rokit), puis dans le dossier du dépôt lance `rokit install` (installe Rojo 7.7.1, la même version que GitHub).
 2. Installe le plugin Rojo dans Studio : `rojo plugin install`.
 3. Conseillé : installe l'extension **Rojo** et **Luau Language Server** dans VS Code.
 
-### Session de travail
+### Du code vers Studio (en direct)
 
 1. Ouvre le dépôt dans VS Code, sur ta branche de travail.
-2. Lance `rojo serve` dans le dossier du dépôt.
-3. Dans Studio, ouvre le `Fc27.rbxlx` (ou un place vide), onglet **Plugins > Rojo > Connect**.
-4. Modifie les scripts **dans VS Code** : chaque enregistrement est envoyé tout de suite dans Studio. Appuie sur **Jouer** dans Studio pour tester.
-5. Enregistre tes changements sur Git (commit + push) : GitHub reconstruit la preview.
+2. Construis le jeu : `rojo build -o Fc27.rbxlx`, puis ouvre `Fc27.rbxlx` dans Studio.
+3. Lance `rojo serve`, puis dans Studio **Plugins > Rojo > Connect**.
+4. Chaque fichier enregistré dans VS Code est envoyé tout de suite dans Studio. Appuie sur **Jouer** pour tester.
 
-### Et si je change quelque chose dans Studio ?
+### De Studio vers le code (syncback)
 
-- **Un script** : ne le modifie pas dans Studio, il serait écrasé par Rojo. Fais le changement dans le fichier `src/…` correspondant.
-- **Un réglage** (éclairage, joueurs…) : ajoute-le dans `default.project.json`, sous `$properties` du service concerné (comme `Lighting` ou `Players`).
-- **Un objet construit à la main** (modèle, décor) : clic droit dessus dans Studio > **Enregistrer dans un fichier**, au format `.rbxmx`, dans le dossier `src/` qui correspond à l'endroit voulu (`src/shared` = ReplicatedStorage, `src/server` = ServerScriptService). Rojo l'inclura comme les scripts. Pour un décor à placer directement dans Workspace, il faudra d'abord ajouter un dossier pour Workspace dans `default.project.json`.
+Ce que tu fais à la main dans Studio (modèles, décor, réglages, scripts modifiés) ne revient pas tout seul dans `src/`. Pour le récupérer :
+
+1. Dans Studio, enregistre le jeu dans le même fichier : **Fichier > Enregistrer** (Ctrl+S) sur `Fc27.rbxlx`.
+2. Dans le dossier du dépôt, lance `rojo syncback --input Fc27.rbxlx`, puis réponds `y`.
+3. Regarde les fichiers changés, puis fais ton commit + push.
+
+Ce que syncback récupère :
+
+| Dans Studio | Arrive dans |
+| --- | --- |
+| Objets de **Workspace** (modèles, pièces, décor) | `src/workspace/` |
+| Scripts de ReplicatedStorage > Shared, ServerScriptService > Server, StarterPlayerScripts > Client | `src/shared/`, `src/server/`, `src/client/` |
+| Réglages de **Lighting**, **Players**, **StarterPlayer** | `default.project.json` |
+
+À savoir :
+- Le stade, les joueurs et le ballon sont créés par les scripts **au lancement du jeu**. Les changer pendant une partie ne sert à rien : ça disparaît à l'arrêt. Leurs réglages (vitesse, dimensions…) sont dans `src/shared/Config.luau`.
+- La caméra et le Terrain de Workspace sont ignorés.
+- Ne relance pas `rojo build -o Fc27.rbxlx` avant d'avoir fait le syncback : cela remplacerait ton fichier enregistré par la version du code.
+- Ce qui n'est pas dans la liste ci-dessus (par exemple ServerStorage) n'est pas récupéré. Il faut d'abord l'ajouter dans `default.project.json`.
 
 ## Façon de travailler
 

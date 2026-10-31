@@ -18,7 +18,7 @@ jobs:
       - name: Install Rojo and luau-lsp
         run: |
           mkdir -p tools
-          curl -sSL -o rojo.zip https://github.com/rojo-rbx/rojo/releases/download/v7.4.4/rojo-7.4.4-linux-x86_64.zip
+          curl -sSL -o rojo.zip https://github.com/rojo-rbx/rojo/releases/download/v7.7.1/rojo-7.7.1-linux-x86_64.zip
           curl -sSL -o lsp.zip https://github.com/JohnnyMorganz/luau-lsp/releases/download/1.32.1/luau-lsp-linux.zip
           unzip -oq rojo.zip -d tools
           unzip -oq lsp.zip -d tools

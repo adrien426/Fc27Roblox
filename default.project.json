@@ -2,23 +2,45 @@
   "name": "Fc27Roblox",
   "tree": {
     "$className": "DataModel",
+    "Workspace": {
+      "$path": "src/workspace"
+    },
     "Lighting": {
-      "$properties": { "Technology": "ShadowMap" }
+      "$properties": {
+        "Technology": "ShadowMap"
+      }
     },
     "ReplicatedStorage": {
-      "Shared": { "$path": "src/shared" }
+      "Shared": {
+        "$path": "src/shared"
+      }
     },
     "ServerScriptService": {
-      "Server": { "$path": "src/server" }
+      "Server": {
+        "$path": "src/server"
+      }
     },
     "StarterPlayer": {
-      "$properties": { "CameraMaxZoomDistance": 160 },
+      "$properties": {
+        "CameraMaxZoomDistance": 160
+      },
       "StarterPlayerScripts": {
-        "Client": { "$path": "src/client" }
+        "Client": {
+          "$path": "src/client"
+        }
       }
     },
     "Players": {
-      "$properties": { "RespawnTime": 2 }
+      "$properties": {
+        "RespawnTime": 2
+      }
     }
+  },
+  "syncbackRules": {
+    "ignoreTrees": [
+      "Workspace/Camera",
+      "Workspace/Terrain"
+    ],
+    "syncCurrentCamera": false
   }
 }

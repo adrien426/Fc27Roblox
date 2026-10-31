@@ -1,4 +1,4 @@
 # Outils du projet, installés avec `rokit install` (https://github.com/rojo-rbx/rokit).
 # Même version de Rojo que la compilation GitHub.
 [tools]
-rojo = "rojo-rbx/rojo@7.4.4"
+rojo = "rojo-rbx/rojo@7.7.1"
