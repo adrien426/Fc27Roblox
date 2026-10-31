@@ -1,0 +1,48 @@
+# Builds the Roblox place from the code on every push and publishes it as a download:
+# main -> release "latest", any other branch -> pre-release "preview-<branch>".
+name: Build place
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rojo and luau-lsp
+        run: |
+          mkdir -p tools
+          curl -sSL -o rojo.zip https://github.com/rojo-rbx/rojo/releases/download/v7.4.4/rojo-7.4.4-linux-x86_64.zip
+          curl -sSL -o lsp.zip https://github.com/JohnnyMorganz/luau-lsp/releases/download/1.32.1/luau-lsp-linux.zip
+          unzip -oq rojo.zip -d tools
+          unzip -oq lsp.zip -d tools
+          curl -sSL -o tools/globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.32.1/scripts/globalTypes.d.luau
+          chmod +x tools/rojo tools/luau-lsp
+
+      - name: Check the Luau code
+        continue-on-error: true
+        run: |
+          tools/rojo sourcemap default.project.json -o sourcemap.json
+          tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
+
+      - name: Build the place file
+        run: tools/rojo build default.project.json -o Fc27.rbxlx
+
+      - name: Publish the place file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            TAG=latest; TITLE="FC27 Roblox"; FLAG=""
+          else
+            TAG="preview-${GITHUB_REF_NAME//\//-}"; TITLE="FC27 Roblox · preview ${GITHUB_REF_NAME}"; FLAG="--prerelease"
+          fi
+          gh release delete "$TAG" -y --cleanup-tag || true
+          gh release create "$TAG" Fc27.rbxlx --target "$GITHUB_SHA" --title "$TITLE" $FLAG \
+            --notes "Télécharge Fc27.rbxlx, ouvre-le dans Roblox Studio (Fichier > Ouvrir), puis appuie sur Jouer. Commit ${GITHUB_SHA::7}."
