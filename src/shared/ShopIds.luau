@@ -2,6 +2,6 @@
 -- scripts/create-shop.mjs at each deploy. 0 = not created yet: buying it with Robux is not offered (coins still work;
 -- the game's creators get everything free anyway).
 return {
-	passes = { celebrations = 0, style = 0, vip = 0, trail = 0 },
-	products = { coins500 = 0, coins1500 = 0, coins5000 = 0 },
+	passes = { celebrations = 2064063715, style = 2063893912, vip = 2064364379, trail = 2064382361 },
+	products = { coins500 = 3726844011, coins1500 = 3726844014, coins5000 = 3726844022 },
 }
