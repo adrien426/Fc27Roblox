@@ -88,7 +88,7 @@ type Actor = {
 	team: number, slot: number, role: string, num: number, name: string,
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
-	drib: any?, skillCD: number?,
+	drib: any?, skillCD: number?, auto: boolean?,
 }
 local actors: { Actor } = {}
 
@@ -852,6 +852,14 @@ local function moveBot(a: Actor, x: number, y: number, speed: number)
 	local hum = a.hum
 	if not hum or not a.root then return end
 	local p = toWorld(math.clamp(x, -2, L + 2), math.clamp(y, -2, W + 2), 0)
+	if a.player then
+		-- Assisted play: his own machine moves him (client/Controls)
+		if a.model then
+			a.model:SetAttribute("AutoTo", p)
+			a.model:SetAttribute("AutoSpeed", speed)
+		end
+		return
+	end
 	hum.WalkSpeed = speed
 	if not a.lastTarget or (a.lastTarget - p).Magnitude > 1.5 or a.moveT <= 0 then
 		hum:MoveTo(p)
@@ -902,7 +910,7 @@ local function botWithBall(a: Actor, dt: number)
 				pressure = math.min(pressure, dist2(x, y, ox, oy))
 			end
 		end
-		if gd < 24 and (gx - x) * d > 4 then
+		if gd < 24 and (gx - x) * d > 0.5 then
 			local gdx, gdy = (gx - x) / gd, (W / 2 + gauss() * 2.5 - y) / gd
 			doShoot(a, gdx, gdy, rng:NextNumber(0.55, 0.85))
 			return
@@ -922,7 +930,7 @@ local function botWithBall(a: Actor, dt: number)
 		end
 		if rng:NextNumber() < 0.06 then doThrough(a, d, 0); return end
 	end
-	moveBot(a, x + d * 8, y + (W / 2 - y) * 0.15, 19)
+	moveBot(a, math.clamp(x + d * 8, 1.5, L - 1.5), y + (W / 2 - y) * 0.15, 19)
 end
 
 local function keeper(a: Actor, dt: number)
@@ -990,12 +998,17 @@ local function botThink(a: Actor, dt: number)
 			local ox, oy = posOf(owner :: Actor)
 			if dist2(x, y, ox, oy) < 1.5 and rng:NextNumber() < 1.2 * dt then
 				local succ = if (owner :: Actor).player then 0.42 else 0.5
+				act(a, "tackle", 0.45)
 				if rng:NextNumber() < succ then
 					local victim = owner :: Actor
 					stunActor(victim, 0.6)
 					victim.cool = 0.6
+					act(victim, "trip", 0.6)
+					label(a, "Tacle !", Color3.fromRGB(255, 120, 100), 1.2)
+					if victim.player then say("Ballon perdu", a.name .. " te tacle", 1.2) end
 					giveBall(a)
 				else
+					label(a, "Tacle raté", Color3.fromRGB(255, 220, 160), 1)
 					a.cool = 0.8
 				end
 			end
@@ -1067,6 +1080,12 @@ end)
 Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, power: any)
 	local a = actorOfPlayer(pl)
 	if not a or type(kind) ~= "string" then return end
+	if kind == "auto" then
+		-- Assisted play (no input for a moment): the computer plays for him until he touches the controls again
+		a.auto = dx == 1
+		if not a.auto and a.model then a.model:SetAttribute("AutoTo", nil) end
+		return
+	end
 	if phase ~= "play" and phase ~= "set" then return end
 	if a.stun > 0 then return end
 	dx = if type(dx) == "number" and dx == dx then dx else 0
@@ -1176,6 +1195,7 @@ RunService.Heartbeat:Connect(function(dt)
 			if not a.root then
 				owner = nil
 			else
+				local prevX = ball.x
 				local x, y = posOf(a)
 				local fx, fy = facingOf(a)
 				local vx, vy = velOf(a)
@@ -1190,6 +1210,8 @@ RunService.Heartbeat:Connect(function(dt)
 					ball.x, ball.y, ball.z = x + fx * 0.75, y + fy * 0.75, 0
 				end
 				ball.vx, ball.vy, ball.vz = vx, vy, 0
+				-- Carried over a line: goal (walked in between the posts), corner, goal kick or throw-in
+				if phase == "play" and not held then checkBounds(prevX) end
 			end
 		else
 			local px = ball.x
@@ -1205,14 +1227,14 @@ RunService.Heartbeat:Connect(function(dt)
 	aiT += dt
 	if aiT >= AI_DT then
 		for _, a in actors do
-			if a.player then continue end
+			if a.player and not a.auto then continue end
 			if phase == "play" or phase == "set" then
 				botThink(a, aiT)
 			elseif a.hum and a.root then
 				local hx, hy = homeOf(a)
 				moveBot(a, hx, hy, Config.WALK)
 			end
-			if a.model and a.root then
+			if a.model and a.root and not a.player then
 				local v = a.root.AssemblyLinearVelocity
 				Rig.animate(a.model, Vector3.new(v.X, 0, v.Z).Magnitude)
 			end
