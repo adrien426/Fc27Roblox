@@ -99,4 +99,25 @@ Ce que syncback récupère :
 
 ## Façon de travailler
 
-Les changements sont faits sur une branche de travail et publiés en **preview** (release `preview-<branche>`). Ils ne passent dans `main` qu'après validation.
+| Branche | Ce qui se passe à chaque envoi (push) |
+| --- | --- |
+| branche de travail (`claude/…`, …) | le jeu est vérifié et construit, puis publié en release **preview-<branche>** (à ouvrir dans Studio) |
+| `test` | déploiement automatique sur l'**expérience Roblox de test** (workflow *Deploy to Roblox*) |
+| `main` | déploiement automatique sur l'**expérience Roblox de production**, et release `latest` |
+
+1. Chaque changement est fait sur une branche de travail.
+2. Une fois terminé, la branche est **fusionnée dans `test`** (`git merge`, jamais d'écrasement) : le jeu de test se met à jour tout seul.
+3. Quand tout est bon en jeu, **`test` est fusionnée dans `main`** : la production se met à jour.
+
+Le déploiement uploade d'abord les modèles et sons qui ont changé, puis pousse leurs numéros (`AssetIds.luau`, `assets/uploaded.json`) sur la branche déployée, dans un commit de `github-actions[bot]`. C'est pour cela qu'on passe de `test` à `main` par une fusion de `test`, sinon les assets seraient recréés.
+
+Secrets du dépôt à créer une fois (Settings > Secrets and variables > Actions) :
+
+| Secret | Valeur |
+| --- | --- |
+| `ROBLOX_API_KEY` | clé Open Cloud : *assets* lecture/écriture, *universe-places* écriture sur les deux expériences |
+| `ROBLOX_CREATOR_USER_ID` | numéro du compte Roblox qui possède les deux expériences |
+| `ROBLOX_TEST_UNIVERSE_ID`, `ROBLOX_TEST_PLACE_ID` | l'expérience de test |
+| `ROBLOX_PROD_UNIVERSE_ID`, `ROBLOX_PROD_PLACE_ID` | l'expérience de production |
+
+Un déploiement peut aussi être relancé à la main : onglet **Actions > Deploy to Roblox > Run workflow** (choisir `test` ou `main`).

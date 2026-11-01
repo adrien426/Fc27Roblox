@@ -1,0 +1,121 @@
+# Deploys the game to Roblox on every push to:
+#   test -> the TEST experience        (secrets ROBLOX_TEST_UNIVERSE_ID, ROBLOX_TEST_PLACE_ID)
+#   main -> the PRODUCTION experience  (secrets ROBLOX_PROD_UNIVERSE_ID, ROBLOX_PROD_PLACE_ID)
+# Shared secrets: ROBLOX_API_KEY (Open Cloud: assets read+write, universe-places write on both experiences)
+# and ROBLOX_CREATOR_USER_ID (the account that owns the experiences).
+# Steps: upload the models and sounds that changed, commit their ids back to the branch, check and build the
+# place with Rojo, publish it. Can also be re-run by hand (Actions > Deploy to Roblox > Run workflow, on test or main).
+name: Deploy to Roblox
+
+on:
+  push:
+    branches: [test, main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref_name == 'test' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'test' }}
+      url: ${{ steps.publish.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick the experience and check the secrets
+        env:
+          KEY: ${{ secrets.ROBLOX_API_KEY }}
+          CREATOR: ${{ secrets.ROBLOX_CREATOR_USER_ID }}
+          TEST_UNIVERSE: ${{ secrets.ROBLOX_TEST_UNIVERSE_ID }}
+          TEST_PLACE: ${{ secrets.ROBLOX_TEST_PLACE_ID }}
+          PROD_UNIVERSE: ${{ secrets.ROBLOX_PROD_UNIVERSE_ID }}
+          PROD_PLACE: ${{ secrets.ROBLOX_PROD_PLACE_ID }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = main ]; then P=PROD; U="$PROD_UNIVERSE"; PL="$PROD_PLACE"
+          else P=TEST; U="$TEST_UNIVERSE"; PL="$TEST_PLACE"; fi
+          missing=""
+          [ -n "$KEY" ] || missing="$missing ROBLOX_API_KEY"
+          [ -n "$CREATOR" ] || missing="$missing ROBLOX_CREATOR_USER_ID"
+          [ -n "$U" ] || missing="$missing ROBLOX_${P}_UNIVERSE_ID"
+          [ -n "$PL" ] || missing="$missing ROBLOX_${P}_PLACE_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+          echo "ROBLOX_UNIVERSE_ID=$U" >> "$GITHUB_ENV"
+          echo "ROBLOX_PLACE_ID=$PL" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Prepare the models
+        working-directory: scripts
+        run: |
+          npm ci
+          node prepare-models.mjs
+
+      - name: Upload the changed models and sounds
+        id: upload
+        working-directory: scripts
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_CREATOR_USER_ID: ${{ secrets.ROBLOX_CREATOR_USER_ID }}
+        run: node upload-assets.mjs
+
+      # Also after a partial failure: the assets already created must keep their ids, or they would be created again
+      - name: Commit the asset ids
+        if: ${{ !cancelled() && steps.upload.outcome != 'skipped' }}
+        run: |
+          git add src/shared/AssetIds.luau assets/uploaded.json
+          if git diff --cached --quiet; then echo "Asset ids unchanged"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898341+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Update Roblox asset ids"
+          for i in 1 2 3; do
+            git push -q origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            git pull -q --rebase origin "$GITHUB_REF_NAME"
+          done
+          exit 1
+
+      - name: Install Rojo and luau-lsp
+        run: |
+          mkdir -p tools
+          curl -sSL -o rojo.zip https://github.com/rojo-rbx/rojo/releases/download/v7.7.1/rojo-7.7.1-linux-x86_64.zip
+          curl -sSL -o lsp.zip https://github.com/JohnnyMorganz/luau-lsp/releases/download/1.32.1/luau-lsp-linux.zip
+          unzip -oq rojo.zip -d tools
+          unzip -oq lsp.zip -d tools
+          curl -sSL -o tools/globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.32.1/scripts/globalTypes.d.luau
+          chmod +x tools/rojo tools/luau-lsp
+
+      - name: Check the Luau code and build the place
+        run: |
+          tools/rojo sourcemap default.project.json -o sourcemap.json
+          tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
+          tools/rojo build default.project.json -o Fc27.rbxlx
+
+      - name: Publish to Roblox
+        id: publish
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+        run: |
+          node scripts/publish-place.mjs --file Fc27.rbxlx | tee publish.log
+          url="https://www.roblox.com/games/$ROBLOX_PLACE_ID"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Déployé sur l'expérience ${{ github.ref_name == 'main' && 'de production' || 'de test' }}"
+            echo ""
+            echo "$(grep -E '^(Published|Saved)' publish.log) · commit ${GITHUB_SHA::7}"
+            echo ""
+            echo "Jouer : $url"
+            echo ""
+            echo "Les modèles et sons qui viennent d'être uploadés passent par la modération Roblox : ils peuvent mettre quelques minutes à apparaître."
+          } >> "$GITHUB_STEP_SUMMARY"
