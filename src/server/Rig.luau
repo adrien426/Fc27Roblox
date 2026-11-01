@@ -1,13 +1,21 @@
--- Footballer bodies: computer-controlled players are standard R15 avatars in the team kit, with the shirt
--- number on the back and Roblox's default run and idle animations. Human players get the same kit.
+-- Footballer bodies. Every footballer (computer or human) moves as a standard R15 Humanoid; when the web game's
+-- player model (player.glb, the Ch38 footballer) is loaded, it is welded on as the visible "Body" in the team kit
+-- and the R15 body is hidden. Each player's machine then plays the web game's clips on it (client/Bodies).
+-- Without the model, the R15 avatar shows the kit and plays Roblox's default run and idle animations.
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Assets = require(script.Parent.Assets)
 
 local Rig = {}
 
 local ANIM = { run = "rbxassetid://913376220", walk = "rbxassetid://913402848", idle = "rbxassetid://507766388" }
 local SKIN = { Color3.fromRGB(241, 199, 163), Color3.fromRGB(217, 167, 124), Color3.fromRGB(168, 113, 74), Color3.fromRGB(110, 68, 40) }
+local HAIR = { Color3.fromRGB(43, 26, 16), Color3.fromRGB(20, 16, 14), Color3.fromRGB(110, 70, 35), Color3.fromRGB(200, 160, 90), Color3.fromRGB(150, 60, 30) }
+local BOOTS = { Color3.fromRGB(21, 21, 21), Color3.fromRGB(244, 244, 244), Color3.fromRGB(240, 120, 20), Color3.fromRGB(30, 200, 230), Color3.fromRGB(230, 40, 120) }
+-- Colours of the Ch38 textures, so a tint lands on the wanted colour (same ratios as the web game)
+local TEX_SKIN = Color3.fromRGB(217, 167, 124)
 
 local function numberDecal(torso: BasePart, num: number, color: Color3)
 	local gui = Instance.new("SurfaceGui")
@@ -109,6 +117,7 @@ function Rig.createBot(name: string, teamIdx: number, num: number, rng: Random):
 		model = blockBody(name)
 	end
 	Rig.dress(model, teamIdx, num)
+	Rig.addBody(model, teamIdx, num, rng)
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if hum then
 		hum.DisplayName = name
@@ -120,11 +129,105 @@ function Rig.createBot(name: string, teamIdx: number, num: number, rng: Random):
 	return model
 end
 
+-- Tints a part of the Ch38 model. Its kit textures are plain white cloth: the texture keeps the folds and the colour
+-- multiplies it (SurfaceAppearance.Color); a part with only a TextureID loses the texture and takes the colour.
+local function tint(p: BasePart, c: Color3, keepTexture: boolean)
+	local sa = p:FindFirstChildOfClass("SurfaceAppearance")
+	if sa and pcall(function() (sa :: any).Color = c end) then return end
+	if keepTexture then return end
+	if sa then sa:Destroy() end
+	if p:IsA("MeshPart") then p.TextureID = "" end
+	p.Color = c
+end
+
+local function ratio(c: Color3, ref: Color3): Color3
+	return Color3.new(math.min(1, c.R / ref.R), math.min(1, c.G / ref.G), math.min(1, c.B / ref.B))
+end
+
+-- Hides the R15 body (it still walks, jumps and collides) and whatever the avatar wears
+local function hideAvatar(model: Model, body: Model)
+	local function hide(d: Instance)
+		if d:IsDescendantOf(body) then return end
+		if d:IsA("Accessory") or d:IsA("Clothing") or d:IsA("ShirtGraphic") then
+			task.defer(function() d:Destroy() end)
+		elseif d:IsA("BasePart") then
+			d.Transparency = 1
+		elseif d:IsA("Decal") or d:IsA("SurfaceGui") then
+			task.defer(function() d:Destroy() end)
+		end
+	end
+	for _, d in model:GetDescendants() do hide(d) end
+	model.DescendantAdded:Connect(hide)
+end
+
+-- Welds the web game's footballer on this body, in the team kit. Returns false when the model is not loaded.
+function Rig.addBody(model: Model, teamIdx: number, num: number, rng: Random): boolean
+	local tpl = Assets.player
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if not tpl or not root or not root:IsA("BasePart") then return false end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local old = model:FindFirstChild("Body")
+	if old then old:Destroy() end
+	local team = Config.TEAMS[teamIdx]
+	local body = tpl:Clone()
+	body.Name = "Body"
+
+	-- Height: 1.8 m, give or take a few centimetres (in the bind pose, the model's box is its height)
+	local _, size0 = body:GetBoundingBox()
+	local ht = rng:NextNumber(0.96, 1.04)
+	body:ScaleTo(body:GetScale() * Config.PLAYER_HEIGHT * Config.M * ht / math.max(0.1, size0.Y))
+
+	-- Kit and looks: shirt and socks in the team colour, shorts, boots, skin tone, hair colour or a shaved head
+	local skin = SKIN[rng:NextInteger(1, #SKIN)]
+	local hair = HAIR[rng:NextInteger(1, #HAIR)]
+	local boot = BOOTS[rng:NextInteger(1, #BOOTS)]
+	local shaved = rng:NextNumber() < 0.2
+	for _, p in body:GetDescendants() do
+		if not p:IsA("BasePart") then continue end
+		local n = p.Name
+		if n:find("Shirt") then tint(p, team.color, false)
+		elseif n:find("Shorts") then tint(p, team.shorts, false)
+		elseif n:find("Socks") then tint(p, team.color, false)
+		elseif n:find("Shoes") then tint(p, boot, false)
+		elseif n:find("Hair") then
+			if shaved then p.Transparency = 1 else tint(p, hair, true) end
+		elseif n:find("Body") then tint(p, ratio(skin, TEX_SKIN), true) end
+	end
+
+	-- Feet on the ground: the R15 root floats HipHeight + half its height above it
+	local cf, size = body:GetBoundingBox()
+	local hip = if hum then hum.HipHeight else 2
+	local feet = root.CFrame * CFrame.new(0, -(hip + root.Size.Y / 2), 0) * CFrame.Angles(0, Config.BODY_YAW, 0)
+	local rel = (cf * CFrame.new(0, -size.Y / 2, 0)):ToObjectSpace(body:GetPivot())
+	body:PivotTo(feet * rel)
+	for _, p in body:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+			p.CanCollide = false
+			p.CanTouch = false
+			p.CanQuery = false
+			p.Massless = true
+			p.CastShadow = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = root
+			w.Part1 = p
+			w.Parent = p
+		end
+	end
+	body.Parent = model
+	model:SetAttribute("Team", teamIdx)
+	model:SetAttribute("Num", num)
+	hideAvatar(model, body)
+	CollectionService:AddTag(body, "FC27Body")
+	return true
+end
+
 -- Animation tracks per body, loaded on first use
 local tracksOf: { [Model]: { [string]: AnimationTrack } } = setmetatable({}, { __mode = "k" }) :: any
 
--- Run / walk / idle from the body's speed
+-- Run / walk / idle from the body's speed (R15 stand-in only: the web game's body is animated by client/Bodies)
 function Rig.animate(model: Model, speed: number)
+	if model:FindFirstChild("Body") then return end
 	local tracks = tracksOf[model]
 	if not tracks then
 		local hum = model:FindFirstChildOfClass("Humanoid")

@@ -9,6 +9,7 @@ local Teams = game:GetService("Teams")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local BallPhysics = require(Shared.BallPhysics)
+local Assets = require(script.Parent.Assets)
 local Pitch = require(script.Parent.Pitch)
 local Rig = require(script.Parent.Rig)
 
@@ -47,7 +48,7 @@ local BallState = remote("BallState", true) :: any
 local Message = remote("Message") :: RemoteEvent
 Net.Parent = ReplicatedStorage
 
-Pitch.build()
+Pitch.build(Assets.stadium)
 local botFolder = Instance.new("Folder")
 botFolder.Name = "Bots"
 botFolder.Parent = workspace
@@ -124,6 +125,16 @@ local function place(a: Actor, x: number, y: number)
 	end
 end
 
+-- Tells every player's machine which of the web game's clips this body plays now (client/Bodies picks the
+-- part of the clip and its length); dur 0 = the clip's usual length
+local function act(a: Actor, clip: string, dur: number?)
+	local m = a.model
+	if not m then return end
+	m:SetAttribute("Act", clip)
+	m:SetAttribute("ActDur", dur or 0)
+	m:SetAttribute("ActAt", workspace:GetServerTimeNow())
+end
+
 local function attach(a: Actor, model: Model)
 	a.model = model
 	a.hum = model:FindFirstChildOfClass("Humanoid")
@@ -135,6 +146,7 @@ local function spawnBot(a: Actor)
 	local model = Rig.createBot(a.name, a.team, a.num, rng)
 	model.Parent = botFolder
 	attach(a, model)
+	model:SetAttribute("Role", a.role)
 	local hx, hy = homeOf(a)
 	place(a, hx, hy)
 	if a.root then pcall(function() (a.root :: BasePart):SetNetworkOwner(nil) end) end
@@ -179,7 +191,8 @@ local function gauss(): number
 	return math.sqrt(-2 * math.log(math.max(1e-9, rng:NextNumber()))) * math.cos(2 * math.pi * rng:NextNumber())
 end
 
-local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: number?)
+local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: number?, clip: string?)
+	act(a, clip or (if phase == "set" and setKindNow == "throw" then "throwIn" else "kick"))
 	if phase == "set" then phase = "play" end
 	owner, held = nil, false
 	local fx, fy = facingOf(a)
@@ -262,7 +275,7 @@ local function passTo(a: Actor, m: Actor)
 		lead = math.min(1.6, t)
 	end
 	local ang = math.atan2(ty - py, tx - px) + gauss() * 0.02
-	kickBall(a, math.cos(ang) * v, math.sin(ang) * v, 0)
+	kickBall(a, math.cos(ang) * v, math.sin(ang) * v, 0, nil, if phase == "set" and setKindNow == "throw" then "throwIn" else "pass")
 	target = m
 end
 
@@ -290,7 +303,7 @@ end
 
 local function doPass(a: Actor, dx: number, dy: number)
 	local m = bestPass(a, dx, dy) or bestPass(a, dx, dy, -0.2) or bestPass(a, nil, nil)
-	if m then passTo(a, m) else kickBall(a, dx * 14, dy * 14, 0) end
+	if m then passTo(a, m) else kickBall(a, dx * 14, dy * 14, 0, nil, if phase == "set" and setKindNow == "throw" then "throwIn" else "pass") end
 end
 
 local function doThrough(a: Actor, dx: number, dy: number)
@@ -315,7 +328,7 @@ local function doThrough(a: Actor, dx: number, dy: number)
 	local d = dist2(px, py, tx, ty)
 	local v = math.clamp(d * 0.78 + 5, 9, 24)
 	local ang = math.atan2(ty - py, tx - px) + gauss() * 0.03
-	kickBall(a, math.cos(ang) * v, math.sin(ang) * v, 0)
+	kickBall(a, math.cos(ang) * v, math.sin(ang) * v, 0, nil, "pass")
 	target = best
 end
 
@@ -379,6 +392,7 @@ end
 local function doTackle(a: Actor)
 	local victim = owner
 	if not victim or victim.team == a.team or held then return end
+	act(a, "tackle", 0.45)
 	local px, py = posOf(a)
 	local ox, oy = posOf(victim)
 	if dist2(px, py, ox, oy) > 2.3 then
@@ -387,6 +401,7 @@ local function doTackle(a: Actor)
 	end
 	if rng:NextNumber() < 0.55 then
 		stunActor(victim, 0.7)
+		act(victim, "trip", 0.7)
 		victim.cool = 0.6
 		local fx, fy = facingOf(a)
 		owner = nil
@@ -423,6 +438,7 @@ local function setPiece(kind: string, t: number, x: number, y: number, taker: Ac
 	giveBall(tk)
 	ball.x, ball.y = x, y
 	phase, phaseT, setTaker, setKindNow = "set", 0, tk, kind
+	Net:SetAttribute("SetKind", kind)
 	publish()
 end
 
@@ -448,6 +464,8 @@ local function goalFor(t: number)
 	publish()
 	say("BUT !", Config.TEAMS[t].name .. " · " .. scorer, 3.5)
 	Net:SetAttribute("LastGoalTeam", t)
+	Net:SetAttribute("GoalAt", workspace:GetServerTimeNow())
+	if lastTouch and lastTouch.team == t then act(lastTouch, "siuu") end
 end
 
 -- Ball over a line: goal, corner, goal kick or throw-in
@@ -520,6 +538,7 @@ local function tryControl()
 					giveBall(a)
 					held = true
 					a.holdT = 1.3
+					act(a, "gkCatch", 0.5)
 					if shotBy then say("Arrêt !", a.name, 1) end
 				else
 					ball.vx = -ball.vx * 0.35 + gauss() * 2
@@ -542,7 +561,7 @@ local function tryControl()
 			local hx, hy
 			if gd < 22 then hx, hy = gdx / gd, gdy / gd else hx, hy = facingOf(a) end
 			local v = if gd < 22 then 13 else 10
-			kickBall(a, hx * v, hy * v, if gd < 22 then 0.5 else 3)
+			kickBall(a, hx * v, hy * v, if gd < 22 then 0.5 else 3, nil, "head")
 			if gd < 22 then shotBy = a.team end
 			return
 		end
@@ -628,7 +647,12 @@ local function keeper(a: Actor, dt: number)
 		local t = (gx + d * 0.6 - ball.x) / ball.vx
 		local yc = ball.y + ball.vy * t
 		if t > 0 and t < 1.2 and math.abs(yc - W / 2) < GH + 1.5 then
-			if t < 0.55 and a.diveT <= 0 and math.abs(yc - y) > 0.8 then a.diveT = 0.6 end
+			if t < 0.55 and a.diveT <= 0 and math.abs(yc - y) > 0.8 then
+				a.diveT = 0.6
+				-- Same rule as the web game: the side of the dive seen from the keeper (he faces the pitch, +x or -x)
+				local lat = -(yc - y) * d
+				act(a, if lat > 0 then "diveL" else "diveR", 0.6)
+			end
 			moveBot(a, gx + d * 0.6, math.clamp(yc, W / 2 - GH - 0.5, W / 2 + GH + 0.5), if a.diveT > 0 then 34 else 24)
 			if a.diveT > 0 and a.root then
 				-- The dive: a quick lunge sideways
@@ -720,7 +744,9 @@ local function assignPlayer(pl: Player)
 		if pick.player ~= pl then return end
 		attach(pick, char)
 		Rig.dress(char, t, pick.num)
+		Rig.addBody(char, t, pick.num, rng)
 		char:SetAttribute("Team", t)
+		char:SetAttribute("Role", pick.role)
 		local hum = pick.hum
 		if hum then hum.WalkSpeed = Config.WALK end
 		local hx, hy = homeOf(pick)
