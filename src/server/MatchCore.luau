@@ -952,7 +952,7 @@ local function tryControl()
 				return
 			end
 		end
-		local reach = if a.player then 1.3 else 1.0
+		local reach = 1.3
 		if ball.z < 0.9 and d < reach and d < bd then best, bd = a, d end
 		-- Header for a ball at head height coming at him
 		if ball.z >= 0.9 and ball.z < 2.4 and d < 0.9 and bsp > 4 then
@@ -971,13 +971,15 @@ local function tryControl()
 end
 
 -- ---------- Computer players ----------
-local function moveBot(a: Actor, x: number, y: number, speed: number)
+-- precise: follow a moving target closely (going for the ball); otherwise only a target that moved 1.5 m or more,
+-- or once a second, is sent again
+local function moveBot(a: Actor, x: number, y: number, speed: number, precise: boolean?)
 	local hum = a.hum
 	if not hum or not a.root then return end
 	local p = toWorld(math.clamp(x, -2, L + 2), math.clamp(y, -2, W + 2), 0)
 	if a.player then return end -- a human moves himself
 	hum.WalkSpeed = speed
-	if not a.lastTarget or (a.lastTarget - p).Magnitude > 1.5 or a.moveT <= 0 then
+	if not a.lastTarget or (a.lastTarget - p).Magnitude > (if precise then 0.3 * M else 1.5) or a.moveT <= 0 then
 		hum:MoveTo(p)
 		a.lastTarget = p
 		a.moveT = 1
@@ -1118,8 +1120,12 @@ local function botThink(a: Actor, dt: number)
 		return
 	end
 	if phase == "play" and (not owner or (owner :: Actor).team ~= t) and (chaserOf(t) == a or target == a) then
+		-- Where the ball will be, and half a metre past it so that he runs into it instead of stopping short
 		local px, py = ball.x + ball.vx * 0.35, ball.y + ball.vy * 0.35
-		moveBot(a, px, py, 21)
+		local ddx, ddy = px - x, py - y
+		local dd = math.sqrt(ddx * ddx + ddy * ddy)
+		if dd > 0.1 then px, py = px + ddx / dd * 0.5, py + ddy / dd * 0.5 end
+		moveBot(a, px, py, 21, true)
 		-- Tackle when close to an opponent with the ball
 		if owner and (owner :: Actor).team ~= t and a.cool <= 0 and not held and not (owner :: Actor).drib then
 			local ox, oy = posOf(owner :: Actor)
@@ -1237,7 +1243,8 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	end
 end)
 
--- Two footballers closer than 1.1 m are pushed apart (web game's rule). Only computer players are moved: a human
+-- Two footballers closer than 0.9 m are pushed apart (the web game's 1.1 m kept a computer player off a ball lying
+-- next to a fallen player). Only computer players are moved: a human
 -- player's character is moved by his own machine, so a computer player steps aside by the whole overlap.
 local function separate()
 	for i = 1, #actors do
@@ -1250,8 +1257,8 @@ local function separate()
 			if not rb or (a.player and b.player) then continue end
 			local d = Vector3.new(rb.Position.X - ra.Position.X, 0, rb.Position.Z - ra.Position.Z)
 			local dm = d.Magnitude / M
-			if dm >= 1.1 or dm < 1e-3 then continue end
-			local push = d.Unit * (1.1 - dm) * M
+			if dm >= 0.9 or dm < 1e-3 then continue end
+			local push = d.Unit * (0.9 - dm) * M
 			if a.player then
 				rb.CFrame += push
 			elseif b.player then
