@@ -12,10 +12,10 @@ Config.G = 9.8
 Config.BALL_R = 0.11
 Config.GROUND_Y = 0 -- world Y of the grass
 
--- Web game's player model: height in metres, turn so it faces where the R15 body faces (Mixamo models face +Z,
--- Roblox characters face -Z)
+-- Web game's player model: height in metres. It is turned automatically to face where the character faces
+-- (server/Rig reads its hip bones); BODY_YAW is an extra turn on top of that, in radians, if ever needed.
 Config.PLAYER_HEIGHT = 1.8
-Config.BODY_YAW = math.pi
+Config.BODY_YAW = 0
 
 -- Ball of balls.glb used in the match: classique, etoiles, jabu, brazu or euro
 Config.BALL_MODEL = "classique"
