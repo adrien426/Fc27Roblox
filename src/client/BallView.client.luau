@@ -41,6 +41,53 @@ for _, f in { Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.
 	spot.Parent = gui
 end
 
+-- The web game's ball model (balls.glb, loaded by the server into ReplicatedStorage.FC27Assets) replaces the plain
+-- sphere when it is there: its parts are scaled to the ball, centred on it and welded, the sphere becomes invisible.
+task.spawn(function()
+	local assets = ReplicatedStorage:WaitForChild("FC27Assets", 15)
+	local balls = assets and assets:WaitForChild("Balls", 15)
+	if not balls then return end
+	local src = balls:FindFirstChild(Config.BALL_MODEL, true) or balls
+	local parts: { BasePart } = {}
+	if src:IsA("BasePart") then table.insert(parts, src) end
+	for _, d in src:GetDescendants() do
+		if d:IsA("BasePart") then table.insert(parts, d) end
+	end
+	if #parts == 0 then return end
+	local m = Instance.new("Model")
+	m.Name = "BallModel"
+	for _, p in parts do
+		local c = p:Clone()
+		c:ClearAllChildren()
+		for _, k in p:GetChildren() do
+			if k:IsA("SurfaceAppearance") then k:Clone().Parent = c end
+		end
+		c.Parent = m
+	end
+	local cf, size = m:GetBoundingBox()
+	m:ScaleTo(SIZE / math.max(size.X, size.Y, size.Z, 1e-3))
+	cf = m:GetBoundingBox()
+	m:PivotTo(m:GetPivot() + (ball.Position - cf.Position))
+	for _, p in m:GetChildren() do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CanTouch = false
+			p.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = ball
+			w.Part1 = p
+			w.Parent = p
+		end
+	end
+	for _, g in ball:GetChildren() do
+		if g:IsA("SurfaceGui") then g:Destroy() end
+	end
+	ball.Transparency = 1
+	m.Parent = ball
+end)
+
 local shadow = Instance.new("Part")
 shadow.Name = "FC27BallShadow"
 shadow.Shape = Enum.PartType.Cylinder
@@ -60,6 +107,7 @@ local ownerModel: Model? = nil
 local held = false
 local shown = Config.toWorld(state.x, state.y, 0) + Vector3.new(0, R, 0)
 local spin = CFrame.identity
+local stride = 0 -- stride phase (radians) of the player who has the ball
 
 BallState.OnClientEvent:Connect(function(s: any, o: any)
 	if type(s) ~= "table" then return end
@@ -79,7 +127,17 @@ RunService.RenderStepped:Connect(function(dt)
 		if held then
 			want = Vector3.new(root.Position.X, groundY + 1.0 * M, root.Position.Z) + flat * 0.4 * M
 		else
-			want = Vector3.new(root.Position.X, groundY + R, root.Position.Z) + flat * 0.75 * M
+			-- One touch per stride, on the right foot, like the web game but kept at the feet (25 cm, up to 45 cm
+			-- at full speed): the ball is nudged ahead and the player catches it up. Speeds in metres per second.
+			local v = root.AssemblyLinearVelocity
+			local sp = Vector3.new(v.X, 0, v.Z).Magnitude / M
+			stride += (if sp < 1 then sp * 9 else 8.2 + sp * 0.75) * dt
+			local cyc = (stride / (math.pi * 2)) % 1
+			local push = math.min(0.2, sp * 0.03)
+			local off = 0.25 + push * math.sin(math.pi * cyc ^ 0.6)
+			local side = 0.08
+			local right = flat:Cross(Vector3.yAxis)
+			want = Vector3.new(root.Position.X, groundY + R, root.Position.Z) + (flat * off + right * side) * M
 		end
 	else
 		BallPhysics.advance(state, dt)

@@ -12,6 +12,14 @@ Config.G = 9.8
 Config.BALL_R = 0.11
 Config.GROUND_Y = 0 -- world Y of the grass
 
+-- Web game's player model (Ch38): its exact height in metres, as in player.glb. It is turned automatically to face where the character faces
+-- (server/Rig reads its hip bones); BODY_YAW is an extra turn on top of that, in radians, if ever needed.
+Config.PLAYER_HEIGHT = 1.785
+Config.BODY_YAW = 0
+
+-- Ball of balls.glb used in the match: classique, etoiles, jabu, brazu or euro
+Config.BALL_MODEL = "classique"
+
 Config.MATCH_MINUTES = 6 -- real minutes for the full 90'
 Config.TEAM_SIZE = 11
 Config.SNAPSHOT_HZ = 20

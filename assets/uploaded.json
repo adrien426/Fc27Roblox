@@ -1,0 +1,44 @@
+{
+  "player": {
+    "id": 73631537493084,
+    "sha256": "939ca6ab8b69dd20510b08e0431eab26bffeb9e03ac24c25d03ed23bc931db3f",
+    "file": "assets/build/player.glb",
+    "type": "Model"
+  },
+  "stadium": {
+    "id": 81120181062508,
+    "sha256": "a5e0b067195242627a0bbef55768d0b4b633731f81a20c6f38bf4d60d4c5c72d",
+    "file": "assets/build/stadium.glb",
+    "type": "Model"
+  },
+  "balls": {
+    "id": 98156148120151,
+    "sha256": "a7e910c942c9abd29e11b4e8e1931aee280e67b12a735f1b564af32c09c9d1b8",
+    "file": "assets/build/balls.glb",
+    "type": "Model"
+  },
+  "sounds.whistle": {
+    "id": 136259723407282,
+    "sha256": "31609507dab8d63d306e2962c5d77a2566c85b5c9721f6ad815285beb9f054f2",
+    "file": "assets/source/sounds/whistle.mp3",
+    "type": "Audio"
+  },
+  "sounds.bed": {
+    "id": 111053005158227,
+    "sha256": "ed622013f139b399f0b02496ae91e6abdd41a95cf0116c378d0713fd12ea0f4b",
+    "file": "assets/source/sounds/bed.mp3",
+    "type": "Audio"
+  },
+  "sounds.chant": {
+    "id": 138515484233725,
+    "sha256": "23b1ad848f7e5720c47bf999c14dfbffcd9b42492b43ba707c9d1cd8b6bbacec",
+    "file": "assets/source/sounds/chant.mp3",
+    "type": "Audio"
+  },
+  "sounds.roar": {
+    "id": 116598049171507,
+    "sha256": "8dbb8d13aadbbf40ab7e48972222c7db7bfe9d5aef7a314df8a22ebf62332929",
+    "file": "assets/source/sounds/roar.mp3",
+    "type": "Audio"
+  }
+}
