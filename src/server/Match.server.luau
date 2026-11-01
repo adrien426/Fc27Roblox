@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Teams = game:GetService("Teams")
+local PhysicsService = game:GetService("PhysicsService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -135,7 +136,22 @@ local function act(a: Actor, clip: string, dur: number?)
 	m:SetAttribute("ActAt", workspace:GetServerTimeNow())
 end
 
+-- Footballers do not collide with each other (walking into one would climb on top of him): like the web game,
+-- they are pushed apart instead (separate() in the main loop)
+local GROUP = "Footballers"
+pcall(function() PhysicsService:RegisterCollisionGroup(GROUP) end)
+PhysicsService:CollisionGroupSetCollidable(GROUP, GROUP, false)
+local grouped: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local function setGroup(d: Instance)
+	if d:IsA("BasePart") then d.CollisionGroup = GROUP end
+end
+
 local function attach(a: Actor, model: Model)
+	if not grouped[model] then
+		grouped[model] = true
+		for _, d in model:GetDescendants() do setGroup(d) end
+		model.DescendantAdded:Connect(setGroup)
+	end
 	a.model = model
 	a.hum = model:FindFirstChildOfClass("Humanoid")
 	local r = model:FindFirstChild("HumanoidRootPart")
@@ -792,6 +808,33 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	end
 end)
 
+-- Two footballers closer than 1.1 m are pushed apart (web game's rule). Only computer players are moved: a human
+-- player's character is moved by his own machine, so a computer player steps aside by the whole overlap.
+local function separate()
+	for i = 1, #actors do
+		local a = actors[i]
+		local ra = a.root
+		if not ra then continue end
+		for j = i + 1, #actors do
+			local b = actors[j]
+			local rb = b.root
+			if not rb or (a.player and b.player) then continue end
+			local d = Vector3.new(rb.Position.X - ra.Position.X, 0, rb.Position.Z - ra.Position.Z)
+			local dm = d.Magnitude / M
+			if dm >= 1.1 or dm < 1e-3 then continue end
+			local push = d.Unit * (1.1 - dm) * M
+			if a.player then
+				rb.CFrame += push
+			elseif b.player then
+				ra.CFrame -= push
+			else
+				ra.CFrame -= push / 2
+				rb.CFrame += push / 2
+			end
+		end
+	end
+end
+
 -- ---------- Main loop ----------
 local sendT, aiT = 0, 0
 local AI_DT = 0.1
@@ -803,6 +846,7 @@ RunService.Heartbeat:Connect(function(dt)
 		a.cool = math.max(0, a.cool - dt)
 		a.stun = math.max(0, a.stun - dt)
 	end
+	separate()
 
 	if phase == "play" or phase == "set" then
 		clock += dt * 90 / (Config.MATCH_MINUTES * 60)

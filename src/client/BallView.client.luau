@@ -127,15 +127,15 @@ RunService.RenderStepped:Connect(function(dt)
 		if held then
 			want = Vector3.new(root.Position.X, groundY + 1.0 * M, root.Position.Z) + flat * 0.4 * M
 		else
-			-- Like the web game: one touch per stride, on the right foot. The ball is pushed ahead, rolls away and
-			-- the player catches it up; longer touches at speed. Speeds in metres per second.
+			-- One touch per stride, on the right foot, like the web game but kept closer to the feet: the ball is
+			-- nudged ahead and the player catches it up. Speeds in metres per second.
 			local v = root.AssemblyLinearVelocity
 			local sp = Vector3.new(v.X, 0, v.Z).Magnitude / M
 			stride += (if sp < 1 then sp * 9 else 8.2 + sp * 0.75) * dt
 			local cyc = (stride / (math.pi * 2)) % 1
-			local push = math.min(1.05, sp * 0.13)
-			local off = 0.52 + push * math.sin(math.pi * cyc ^ 0.6)
-			local side = 0.08 + 0.06 * math.min(1, sp / 6)
+			local push = math.min(0.3, sp * 0.04)
+			local off = 0.3 + push * math.sin(math.pi * cyc ^ 0.6)
+			local side = 0.1
 			local right = flat:Cross(Vector3.yAxis)
 			want = Vector3.new(root.Position.X, groundY + R, root.Position.Z) + (flat * off + right * side) * M
 		end
