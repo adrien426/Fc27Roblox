@@ -860,6 +860,8 @@ local function publishLineups()
 	for t = 1, 2 do table.sort(teams[t], function(p, q) return p.num < q.num end) end
 	Net:SetAttribute("Lineups", game:GetService("HttpService"):JSONEncode(teams))
 end
+-- Right away: the locker room's picker shows the places before any match has started
+publishLineups()
 
 local function kickoff(t: number)
 	publishLineups()
@@ -1249,7 +1251,11 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 		char:SetAttribute("Team", t)
 		char:SetAttribute("Role", p.role)
 		local hum = p.hum
-		if hum then hum.WalkSpeed = Config.WALK end
+		if hum then
+			hum.WalkSpeed = Config.WALK
+			hum.UseJumpPower = false
+			hum.JumpHeight = 0 -- no jumping in a football match (Roblox also hides the jump button)
+		end
 		local hx, hy = homeOf(p)
 		place(p, hx, hy)
 	end
