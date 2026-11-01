@@ -62,6 +62,7 @@ botFolder.Parent = workspace
 local score = { 0, 0 }
 -- Every goal with what led to it (read by the test hook at the bottom, for scripts/inspect/match.luau)
 local goalLog: { { [string]: any } } = {}
+local stats = { fouls = 0, penalties = 0, cards = 0, shots = 0 }
 local boundsHow = "free" -- "free": ball in flight / rolling, "carried": at someone's feet
 local dir = { 1, -1 } -- team 1 attacks towards x = 105 in the first half
 local clock, half = 0, 1
@@ -92,6 +93,7 @@ type Actor = {
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
 	drib: any?, skillCD: number?, lastActive: number?, warned: boolean?,
+	yellow: number?, sentOff: boolean?,
 }
 local actors: { Actor } = {}
 
@@ -414,6 +416,18 @@ local function stunActor(a: Actor, t: number)
 	if a.model then a.model:SetAttribute("StunUntil", workspace:GetServerTimeNow() + t) end
 end
 
+-- A foul (defined with the restarts below): free kick, or a penalty in the box, with a card now and then
+local foul: (f: Actor, v: Actor, behind: boolean) -> ()
+
+-- Tackled from behind: the tackler comes from the side the victim turns his back to
+local function fromBehind(tackler: Actor, victim: Actor): boolean
+	local px, py = posOf(tackler)
+	local ox, oy = posOf(victim)
+	local fx, fy = facingOf(victim)
+	local d = math.max(dist2(px, py, ox, oy), 1e-3)
+	return ((px - ox) * fx + (py - oy) * fy) / d < -0.3
+end
+
 local function doTackle(a: Actor)
 	local victim = owner
 	if not victim or victim.team == a.team or held then return end
@@ -424,6 +438,7 @@ local function doTackle(a: Actor)
 		stunActor(a, 0.4)
 		return
 	end
+	local behind = fromBehind(a, victim)
 	if rng:NextNumber() < 0.55 then
 		stunActor(victim, 0.7)
 		act(victim, "trip", 0.7)
@@ -435,8 +450,10 @@ local function doTackle(a: Actor)
 		lastTouch = a
 		a.cool = 0.1
 		say("Tacle réussi !", a.name, 0.9)
+		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 	else
 		stunActor(a, 0.6)
+		if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
 	end
 end
 
@@ -702,6 +719,26 @@ local function nearestOf(t: number, x: number, y: number, preferHuman: boolean?)
 end
 
 local function setPiece(kind: string, t: number, x: number, y: number, taker: Actor?)
+	if kind == "penalty" then
+		-- On the spot, 11 m out; the keeper on his line, everybody else out of the box
+		local gx = oppGoalX(t)
+		x, y = gx - dir[t] * 11, W / 2
+		for _, a in actors do
+			if not a.root or a == taker then continue end
+			if a.role == "GK" and a.team ~= t then
+				place(a, gx - dir[t] * 0.3, W / 2)
+			elseif a.role ~= "GK" and math.abs(posOf(a) - gx) < 21 then
+				local _, ay = posOf(a)
+				place(a, gx - dir[t] * rng:NextNumber(21, 25), math.clamp(ay, 12, W - 12))
+			end
+		end
+		if not taker then
+			-- A human of that side takes it, otherwise the nearest computer player
+			for _, a in actors do
+				if a.team == t and a.player and a.root then taker = a; break end
+			end
+		end
+	end
 	resetBall(x, y)
 	local tk = taker or nearestOf(t, x, y, true)
 	if not tk then return end
@@ -714,6 +751,56 @@ local function setPiece(kind: string, t: number, x: number, y: number, taker: Ac
 	phase, phaseT, setTaker, setKindNow = "set", 0, tk, kind
 	Net:SetAttribute("SetKind", kind)
 	publish()
+end
+
+local function inBoxOf(t: number, x: number, y: number): boolean
+	return math.abs(x - ownGoalX(t)) < 16.5 and y > 13.84 and y < 54.16
+end
+
+-- The web game's fouls: a card now and then (more often from behind; a second yellow is a red), advantage when the
+-- fouled side attacks and keeps the ball, otherwise a free kick, or a penalty when it happens in the box
+foul = function(f: Actor, v: Actor, behind: boolean)
+	if phase ~= "play" then return end
+	stats.fouls += 1
+	local card: string? = nil
+	if rng:NextNumber() < (if behind then 0.3 else 0.06) then
+		f.yellow = (f.yellow or 0) + 1
+		card = if (f.yellow :: number) >= 2 and f.role ~= "GK" then "red" else "yellow"
+	end
+	local vx, vy = posOf(v)
+	local inBox = inBoxOf(f.team, vx, vy)
+	local sub = if card == "red" then `Carton rouge pour {f.name} (n°{f.num})`
+		elseif card == "yellow" then `Carton jaune pour {f.name} (n°{f.num})`
+		else `Faute de {f.name} sur {v.name}`
+	label(f, if card == "red" then "🟥 Carton rouge" elseif card == "yellow" then "🟨 Carton jaune" else "Faute !",
+		if card == "red" then Color3.fromRGB(227, 34, 47) elseif card == "yellow" then Color3.fromRGB(246, 211, 45) else Color3.fromRGB(255, 173, 71), 2.2)
+	if card == "red" then
+		f.sentOff = true
+		if f.player then
+			-- A human is not taken off: ten seconds on the spot instead
+			stunActor(f, 10)
+		else
+			if owner == f then owner = nil end
+			if f.model then f.model:Destroy() end
+			f.model, f.hum, f.root = nil, nil, nil
+		end
+	end
+	local o = owner
+	local attacking = (vx - L / 2) * dir[v.team] > 0
+	if not inBox and attacking and o and o.team == v.team and (o ~= v or (v.stun <= 0 and rng:NextNumber() < 0.6)) then
+		label(o, "Avantage !", Color3.fromRGB(79, 224, 138), 1.5)
+		say("Avantage", sub, 1.5)
+		return
+	end
+	if card then stats.cards += 1 end
+	if inBox then
+		stats.penalties += 1
+		say("Penalty !", sub, 2.2)
+		setPiece("penalty", v.team, 0, 0, if v.player then v else nil)
+	else
+		say("Coup franc", sub, 1.8)
+		setPiece("freekick", v.team, math.clamp(vx, 1, L - 1), math.clamp(vy, 1, W - 1), v)
+	end
 end
 
 local function kickoff(t: number)
@@ -1005,17 +1092,20 @@ local function botThink(a: Actor, dt: number)
 			if dist2(x, y, ox, oy) < 1.5 and rng:NextNumber() < 1.2 * dt then
 				local succ = if (owner :: Actor).player then 0.42 else 0.5
 				act(a, "tackle", 0.45)
+				local victim = owner :: Actor
+				local behind = fromBehind(a, victim)
 				if rng:NextNumber() < succ then
-					local victim = owner :: Actor
 					stunActor(victim, 0.6)
 					victim.cool = 0.6
 					act(victim, "trip", 0.6)
 					label(a, "Tacle !", Color3.fromRGB(255, 120, 100), 1.2)
 					if victim.player then say("Ballon perdu", a.name .. " te tacle", 1.2) end
 					giveBall(a)
+					if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 				else
 					label(a, "Tacle raté", Color3.fromRGB(255, 220, 160), 1)
 					a.cool = 0.8
+					if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
 				end
 			end
 		end
@@ -1195,6 +1285,11 @@ RunService.Heartbeat:Connect(function(dt)
 		kickoff(2)
 	elseif phase == "done" and phaseT > 12 then
 		score, half, clock, dir = { 0, 0 }, 1, 0, { 1, -1 }
+		for _, a in actors do
+			a.yellow = 0
+			if a.sentOff and not a.player then spawnBot(a) end
+			a.sentOff = false
+		end
 		kickoff(1)
 	end
 
@@ -1206,6 +1301,15 @@ RunService.Heartbeat:Connect(function(dt)
 				doLob(tk, (oppGoalX(tk.team) - ball.x) / 12, (W / 2 - ball.y) / 34, 0.55)
 			elseif setKindNow == "goalkick" then
 				doLob(tk, dir[tk.team], gauss() * 0.4, 0.8)
+			elseif setKindNow == "penalty" or (setKindNow == "freekick" and dist2(ball.x, ball.y, oppGoalX(tk.team), W / 2) < 30
+				and rng:NextNumber() < 0.7) then
+				-- At goal, towards one side (or straight down the middle now and then for a penalty)
+				local gx = oppGoalX(tk.team)
+				local side = if setKindNow == "penalty" and rng:NextNumber() < 0.15 then 0
+					else (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(0.55, 0.95)
+				local tx, ty = gx - ball.x, W / 2 + side * GH - ball.y
+				local n = math.sqrt(tx * tx + ty * ty)
+				doShoot(tk, tx / n, ty / n, rng:NextNumber(0.6, 0.9))
 			else
 				local m = bestPass(tk, nil, nil)
 				if m then passTo(tk, m) else doPass(tk, dir[tk.team], 0) end
@@ -1294,7 +1398,8 @@ hook.OnInvoke = function(cmd: string): any
 		if phase == "waiting" then kickoff(1) end
 		return true
 	end
-	return { score1 = score[1], score2 = score[2], phase = phase, clock = clock, half = half, goals = goalLog }
+	return { score1 = score[1], score2 = score[2], phase = phase, clock = clock, half = half, goals = goalLog,
+		stats = stats, ball = { math.floor(ball.x), math.floor(ball.y) }, owner = if owner then (owner :: Actor).name else "-" }
 end
 hook.Parent = game:GetService("ServerStorage")
 

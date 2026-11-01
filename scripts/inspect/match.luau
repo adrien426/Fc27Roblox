@@ -14,8 +14,10 @@ local last = 0
 for i = 1, 36 do
 	task.wait(5)
 	local st = hook:Invoke("state")
-	if #st.goals > last or i % 6 == 0 then
-		print(string.format("t=%3ds  %d' (half %d) phase %s  score %d-%d", i * 5, st.clock, st.half, st.phase, st.score1, st.score2))
+	if #st.goals > last or i % 3 == 0 then
+		print(string.format("t=%3ds  %d' (half %d) phase %s  score %d-%d  ball (%d, %d) owner %s  fouls %d penalties %d cards %d",
+			i * 5, st.clock, st.half, st.phase, st.score1, st.score2, st.ball[1], st.ball[2], st.owner,
+			st.stats.fouls, st.stats.penalties, st.stats.cards))
 	end
 	for g = last + 1, #st.goals do
 		local x = st.goals[g]
