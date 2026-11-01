@@ -62,6 +62,22 @@ local clockText = label(clockBox, { Size = UDim2.fromOffset(92, 26), Position = 
 local halfText = label(clockBox, { Size = UDim2.fromOffset(92, 12), Position = UDim2.fromOffset(0, 26), Text = "1re mi-temps", TextSize = 10,
 	Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(190, 196, 206) })
 
+-- Commentary: a line at the bottom of the screen, like the web game's commentator (Net attribute Comment)
+local commentBox = label(gui, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -24), Size = UDim2.fromOffset(520, 30),
+	Text = "", TextSize = 16, Font = Enum.Font.GothamBold, BackgroundTransparency = 0.25, BackgroundColor3 = DARK, Visible = false,
+	TextWrapped = true })
+Instance.new("UICorner", commentBox).CornerRadius = UDim.new(0, 8)
+local commentSerial = 0
+Net:GetAttributeChangedSignal("CommentAt"):Connect(function()
+	local text = Net:GetAttribute("Comment")
+	if type(text) ~= "string" then return end
+	commentSerial += 1
+	local mine = commentSerial
+	commentBox.Text = text
+	commentBox.Visible = true
+	task.delay(3.2, function() if commentSerial == mine then commentBox.Visible = false end end)
+end)
+
 -- Build version, small, bottom left, with what the server sees (phase, who has the ball, who goes for it): it
 -- shows on screenshots, to understand a ball nobody goes for
 local versionText = label(gui, { Size = UDim2.new(1, -12, 0, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,

@@ -185,6 +185,8 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	local old = model:FindFirstChild("Body")
 	if old then old:Destroy() end
 	local team = Config.TEAMS[teamIdx]
+	-- The keeper (shirt number 1) wears his own colour, so that he stands out
+	local kit = if num == 1 then team.gk else team.color
 	local body = tpl:Clone()
 	body.Name = "Body"
 
@@ -200,9 +202,9 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	for _, p in body:GetDescendants() do
 		if not p:IsA("BasePart") then continue end
 		local n = p.Name
-		if n:find("Shirt") then tint(p, team.color, false)
-		elseif n:find("Shorts") then tint(p, team.shorts, false)
-		elseif n:find("Socks") then tint(p, team.color, false)
+		if n:find("Shirt") then tint(p, kit, false)
+		elseif n:find("Shorts") then tint(p, if num == 1 then Color3.fromRGB(25, 25, 25) else team.shorts, false)
+		elseif n:find("Socks") then tint(p, kit, false)
 		elseif n:find("Shoes") then tint(p, boot, false)
 		elseif n:find("Hair") then
 			if shaved then p.Transparency = 1 else tint(p, hair, true) end
