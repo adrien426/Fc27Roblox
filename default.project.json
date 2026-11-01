@@ -32,7 +32,8 @@
     },
     "Players": {
       "$properties": {
-        "RespawnTime": 2
+        "RespawnTime": 2,
+        "CharacterAutoLoads": false
       }
     }
   },

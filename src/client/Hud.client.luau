@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Version = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Version")) :: string
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Message = Net:WaitForChild("Message") :: RemoteEvent
 
@@ -50,6 +51,10 @@ teamTag(1, 8)
 local scoreText = label(board, { Size = UDim2.fromOffset(80, 30), Position = UDim2.fromOffset(66, 5), Text = "0 – 0", TextSize = 22, BackgroundTransparency = 0, BackgroundColor3 = Color3.new(1, 1, 1), TextColor3 = DARK })
 teamTag(2, 154)
 local clockText = label(board, { Size = UDim2.fromOffset(80, 40), Position = UDim2.fromOffset(214, 0), Text = "0’", TextSize = 20, TextColor3 = Color3.fromRGB(242, 194, 48) })
+
+-- Build version, small, bottom left
+label(gui, { Size = UDim2.fromOffset(120, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,
+	Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.4 })
 
 local function refresh()
 	scoreText.Text = string.format("%d – %d", Net:GetAttribute("Score1") or 0, Net:GetAttribute("Score2") or 0)

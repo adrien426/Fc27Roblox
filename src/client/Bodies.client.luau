@@ -102,14 +102,14 @@ local function makePlate(st: Body)
 	p.Parent = st.body
 	st.plate = p
 	-- Where it sits, measured once in the bind pose (the body faces where its root faces): on the shirt's back,
-	-- 12 cm behind the Spine2 bone and 3 cm below it in player.glb, its front face (the number) turned backwards.
+	-- 11.5 cm behind the Spine2 bone and 3 cm below it in player.glb, flush with the cloth, its front face (the number) turned backwards.
 	-- Kept relative to the bone, so it follows the back whatever axes the importer gave the bone.
 	local root = st.root
 	local spine = st.spine :: Bone
 	if root then
 		local look = root.CFrame.LookVector
 		local fwd = Vector3.new(look.X, 0, look.Z).Unit
-		local pos = spine.TransformedWorldCFrame.Position - fwd * (0.125 * M) - Vector3.new(0, 0.03 * M, 0)
+		local pos = spine.TransformedWorldCFrame.Position - fwd * (0.115 * M) - Vector3.new(0, 0.03 * M, 0)
 		st.plateOff = spine.TransformedWorldCFrame:ToObjectSpace(CFrame.lookAt(pos, pos - fwd))
 	end
 end
