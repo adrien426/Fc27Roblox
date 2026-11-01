@@ -1,9 +1,9 @@
 --!strict
 -- Coins, purchases and what each player has chosen to wear, saved between visits (DataStore).
--- - On the test experience (Build.channel ~= "main") every purchase is simulated: the item is given at once, free,
---   so that the shop can be tried without paying.
--- - On main, Robux purchases go through Roblox (game passes and developer products, ids in Shared.ShopIds): the
---   item is given when Roblox confirms the payment.
+-- - The game's creators (its owner, the user ids in Config.CREATORS, high ranks of an owning group, and anyone in
+--   Roblox Studio) get every item free, on any branch: they are building the game.
+-- - Everybody else pays through Roblox (game passes and developer products, ids in Shared.ShopIds, created by
+--   scripts/create-shop.mjs at each deploy): the item is given when Roblox confirms the payment.
 -- Each player's coins, items and choices are on his Player as attributes (Coins, Owned, Equip, VIP), for the HUD
 -- and the shop on his machine. Net.Shop handles "buy", "pack" and "equip".
 local Players = game:GetService("Players")
@@ -15,10 +15,22 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Shop = require(Shared:WaitForChild("Shop"))
 local ShopIds = require(Shared:WaitForChild("ShopIds")) :: any
-local Build = require(Shared:WaitForChild("Build")) :: any
+local Config = require(Shared:WaitForChild("Config")) :: any
+local RunService = game:GetService("RunService")
 
 local Economy = {}
-Economy.simulated = Build.channel ~= "main"
+-- The game's creators: free purchases
+local function isCreator(pl: Player): boolean
+	if RunService:IsStudio() then return true end
+	if game.CreatorType == Enum.CreatorType.User and pl.UserId == game.CreatorId then return true end
+	if table.find(Config.CREATORS or {}, pl.UserId) then return true end
+	if game.CreatorType == Enum.CreatorType.Group then
+		local ok, rank = pcall(function() return pl:GetRankInGroup(game.CreatorId) end)
+		if ok and rank >= 254 then return true end
+	end
+	return false
+end
+local creators: { [Player]: boolean } = {}
 
 export type Data = {
 	coins: number, owned: { [string]: boolean }, equip: { [string]: string },
@@ -42,7 +54,7 @@ local function publish(pl: Player)
 	pl:SetAttribute("Owned", HttpService:JSONEncode(d.owned))
 	pl:SetAttribute("Equip", HttpService:JSONEncode(d.equip))
 	pl:SetAttribute("VIP", d.owned.vip == true)
-	pl:SetAttribute("ShopTest", Economy.simulated)
+	pl:SetAttribute("ShopFree", creators[pl] == true)
 end
 
 local function save(pl: Player)
@@ -61,8 +73,9 @@ local function load(pl: Player)
 		end
 	end
 	data[pl] = d
+	creators[pl] = isCreator(pl)
 	-- Game passes bought on Roblox (outside the game too): owned for good
-	if not Economy.simulated then
+	do
 		for id, passId in ShopIds.passes do
 			if passId > 0 and not d.owned[id] then
 				local ok, has = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(pl.UserId, passId) end)
@@ -138,9 +151,9 @@ Remote.OnServerInvoke = function(pl: Player, action: any, a: any, b: any): (bool
 			grant(pl, a)
 			return true, `{it.name} débloqué !`
 		end
-		if Economy.simulated then
+		if creators[pl] then
 			grant(pl, a)
-			return true, `{it.name} : achat simulé (mode test, gratuit)`
+			return true, `{it.name} : offert (créateur du jeu)`
 		end
 		local passId = ShopIds.passes[a] or 0
 		if passId <= 0 then return false, "Bientôt disponible en Robux" end
@@ -150,11 +163,11 @@ Remote.OnServerInvoke = function(pl: Player, action: any, a: any, b: any): (bool
 		local pack = nil
 		for _, p in Shop.PACKS do if p.id == a then pack = p end end
 		if not pack then return false, "Pack inconnu" end
-		if Economy.simulated then
+		if creators[pl] then
 			d.coins += pack.coins
 			dirty[pl] = true
 			publish(pl)
-			return true, `+{pack.coins} pièces : achat simulé (mode test, gratuit)`
+			return true, `+{pack.coins} pièces : offertes (créateur du jeu)`
 		end
 		local productId = ShopIds.products[a] or 0
 		if productId <= 0 then return false, "Bientôt disponible" end
@@ -209,6 +222,7 @@ Players.PlayerRemoving:Connect(function(pl)
 	save(pl)
 	data[pl] = nil
 	dirty[pl] = nil
+	creators[pl] = nil
 end)
 task.spawn(function()
 	while true do

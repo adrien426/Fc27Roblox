@@ -74,10 +74,11 @@ jobs:
         run: node upload-assets.mjs
 
       # Also after a partial failure: the assets already created must keep their ids, or they would be created again
-      # Main only: the shop's game passes and coin packs must exist on Roblox for real purchases (ids written into
-      # src/shared/ShopIds.luau, committed with the asset ids). On test, purchases are simulated.
-      - name: Create the shop's passes and coin packs (main)
-        if: ${{ github.ref_name == 'main' }}
+      # The shop's game passes and coin packs on Roblox (created once, found again by name; ids written into
+      # src/shared/ShopIds.luau and committed with the asset ids). Real items on every branch: only the game's
+      # creators get them free (server/Economy).
+      - name: Create the shop's passes and coin packs
+        id: shop
         continue-on-error: true
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
@@ -109,8 +110,6 @@ jobs:
       - name: Check the Luau code and build the place
         run: |
           echo "return \"${GITHUB_SHA::7} · $(date -u +%d/%m %H:%M)\"" > src/shared/Version.luau
-          # test: shop purchases simulated (free); main: real Roblox purchases
-          echo "return { channel = \"${{ github.ref_name == 'main' && 'main' || 'test' }}\" }" > src/shared/Build.luau
           tools/rojo sourcemap default.project.json -o sourcemap.json
           tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
           tools/rojo build default.project.json -o Fc27.rbxlx
