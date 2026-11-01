@@ -148,17 +148,29 @@ local function choiceRow(parent: Instance, y: number, slot: string, choices: { S
 	for _, c in choices do
 		local on = equipped == c.id
 		local b = button(parent, c.name, if on then GOLD else Color3.fromRGB(44, 54, 62), if on then DARK else Color3.new(1, 1, 1),
-			{ Size = UDim2.fromOffset(92, 24), Position = UDim2.fromOffset(x, y), TextSize = 12 })
-		if c.color then
+			{ Size = UDim2.fromOffset(104, 24), Position = UDim2.fromOffset(x, y), TextSize = 12 })
+		-- A colour dot on the left, the name pushed right of it (it used to be drawn over long names); a dark ring
+		-- keeps a gold dot visible on the gold "equipped" button; "Classique" has a neutral grey dot
+		local col = c.color or (if slot == "kit" then Color3.fromRGB(150, 150, 150) else nil)
+		if col then
+			local pad = Instance.new("UIPadding")
+			pad.PaddingLeft = UDim.new(0, 14)
+			pad.Parent = b
 			local dot = Instance.new("Frame")
-			dot.Size = UDim2.fromOffset(8, 8)
-			dot.Position = UDim2.fromOffset(4, 8)
-			dot.BackgroundColor3 = c.color :: Color3
+			dot.Size = UDim2.fromOffset(9, 9)
+			dot.AnchorPoint = Vector2.new(0, 0.5)
+			dot.Position = UDim2.new(0, -9, 0.5, 0)
+			dot.BackgroundColor3 = col :: Color3
 			dot.Parent = b
 			Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+			local ring = Instance.new("UIStroke")
+			ring.Color = Color3.fromRGB(20, 20, 20)
+			ring.Thickness = 1
+			ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			ring.Parent = dot
 		end
 		b.Activated:Connect(function() call("equip", slot, c.id) end)
-		x += 98
+		x += 110
 	end
 end
 
