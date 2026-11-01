@@ -51,6 +51,7 @@ type Body = {
 	acc: number,
 	plate: Part?,
 	spine: Bone?,
+	plateOff: CFrame?,
 }
 
 local bodies: { [Model]: Body } = {}
@@ -100,6 +101,17 @@ local function makePlate(st: Body)
 	t.Parent = gui
 	p.Parent = st.body
 	st.plate = p
+	-- Where it sits, measured once in the bind pose (the body faces where its root faces): on the shirt's back,
+	-- 12 cm behind the Spine2 bone and 3 cm below it in player.glb, its front face (the number) turned backwards.
+	-- Kept relative to the bone, so it follows the back whatever axes the importer gave the bone.
+	local root = st.root
+	local spine = st.spine :: Bone
+	if root then
+		local look = root.CFrame.LookVector
+		local fwd = Vector3.new(look.X, 0, look.Z).Unit
+		local pos = spine.TransformedWorldCFrame.Position - fwd * (0.125 * M) - Vector3.new(0, 0.03 * M, 0)
+		st.plateOff = spine.TransformedWorldCFrame:ToObjectSpace(CFrame.lookAt(pos, pos - fwd))
+	end
 end
 
 -- Reported once in the console (F9) when the footballer cannot be animated, to know why
@@ -279,11 +291,9 @@ RunService.RenderStepped:Connect(function(dt)
 		if far and st.acc < 1 / 15 then continue end
 		update(st, now, st.acc)
 		st.acc = 0
-		local plate, spine = st.plate, st.spine
-		if plate and spine then
-			-- Mixamo bones look along +Z (the chest): the plate sits just behind the upper back, its front face
-			-- (-Z, where the number is drawn) turned backwards
-			plate.CFrame = spine.TransformedWorldCFrame * CFrame.new(0, 0.06 * M, -0.15 * M)
+		local plate, spine, off = st.plate, st.spine, st.plateOff
+		if plate and spine and off then
+			plate.CFrame = spine.TransformedWorldCFrame * off
 		end
 	end
 end)
