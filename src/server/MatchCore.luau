@@ -282,6 +282,8 @@ local function bestPass(a: Actor, dx: number?, dy: number?, minAlign: number?): 
 			s = ox * dir[a.team] * 0.35 + open * 1.6 - d * 0.12 + (if m.role == "FW" then 1 else 0)
 			if open < 1.3 then s -= 8 end
 		end
+		-- Computer players look for the humans first (a free human is worth a longer or less obvious pass)
+		if m.player and not a.player and open >= 1.3 then s += 6 end
 		if s > bestS then best, bestS = m, s end
 	end
 	return best
@@ -416,69 +418,6 @@ local function stunActor(a: Actor, t: number)
 	if a.model then a.model:SetAttribute("StunUntil", workspace:GetServerTimeNow() + t) end
 end
 
--- A foul (defined with the restarts below): free kick, or a penalty in the box, with a card now and then
-local foul: (f: Actor, v: Actor, behind: boolean) -> ()
-
--- Tackled from behind: the tackler comes from the side the victim turns his back to
-local function fromBehind(tackler: Actor, victim: Actor): boolean
-	local px, py = posOf(tackler)
-	local ox, oy = posOf(victim)
-	local fx, fy = facingOf(victim)
-	local d = math.max(dist2(px, py, ox, oy), 1e-3)
-	return ((px - ox) * fx + (py - oy) * fy) / d < -0.3
-end
-
-local function doTackle(a: Actor)
-	local victim = owner
-	if not victim or victim.team == a.team or held then return end
-	act(a, "tackle", 0.45)
-	local px, py = posOf(a)
-	local ox, oy = posOf(victim)
-	if dist2(px, py, ox, oy) > 2.3 then
-		stunActor(a, 0.4)
-		return
-	end
-	local behind = fromBehind(a, victim)
-	if rng:NextNumber() < 0.55 then
-		stunActor(victim, 0.7)
-		act(victim, "trip", 0.7)
-		victim.cool = 0.6
-		local fx, fy = facingOf(a)
-		owner = nil
-		ball.x, ball.y = math.clamp(ox, 0.15, L - 0.15), math.clamp(oy, 0.15, W - 0.15)
-		ball.vx, ball.vy, ball.vz = fx * 4, fy * 4, 0
-		lastTouch = a
-		a.cool = 0.1
-		say("Tacle réussi !", a.name, 0.9)
-		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
-	else
-		stunActor(a, 0.6)
-		if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
-	end
-end
-
--- ---------- Skill moves (the web game's 31 dribbles, Shared.Dribbles) ----------
--- The move is picked here with its chance of success and its result rolled at once; the model's attributes
--- (Drib, DribAt, DribF/DribS = forward and side directions, DribV0) tell every machine to play it: the body's
--- animation (client/Bodies), the ball at the feet (client/BallView) and, for a human, his own movement
--- (client/Controls). The server moves the computer players and applies the outcome when the move reaches it.
-local dribbler: Actor? = nil -- after a knock or a flick, he gets first claim on the ball until dribblerT
-local dribblerT = 0
-
-local function now(): number return workspace:GetServerTimeNow() end
-
-local function nearestOpp(a: Actor): (Actor?, number)
-	local x, y = posOf(a)
-	local best, bd = nil, math.huge
-	for _, o in actors do
-		if o.team == a.team or not o.root then continue end
-		local ox, oy = posOf(o)
-		local d = dist2(x, y, ox, oy)
-		if d < bd then best, bd = o, d end
-	end
-	return best, bd
-end
-
 -- A short text above a footballer's head, like the web game's labels
 local function label(a: Actor, text: string, color: Color3, dur: number)
 	local m = a.model
@@ -503,6 +442,84 @@ local function label(a: Actor, text: string, color: Color3, dur: number)
 	t.Parent = g
 	g.Parent = head
 	task.delay(dur, function() if g.Parent then g:Destroy() end end)
+end
+
+-- A foul (defined with the restarts below): free kick, or a penalty in the box, with a card now and then
+local foul: (f: Actor, v: Actor, behind: boolean) -> ()
+
+-- Tackled from behind: the tackler comes from the side the victim turns his back to
+local function fromBehind(tackler: Actor, victim: Actor): boolean
+	local px, py = posOf(tackler)
+	local ox, oy = posOf(victim)
+	local fx, fy = facingOf(victim)
+	local d = math.max(dist2(px, py, ox, oy), 1e-3)
+	return ((px - ox) * fx + (py - oy) * fy) / d < -0.3
+end
+
+local function doTackle(a: Actor)
+	local victim = owner
+	local px, py = posOf(a)
+	-- A loose ball close by: the tackle wins it
+	if not victim and phase == "play" and ball.z < 1 and dist2(px, py, ball.x, ball.y) < 2.6 then
+		act(a, "tackle", 0.45)
+		giveBall(a)
+		label(a, "Ballon récupéré", Color3.fromRGB(120, 230, 120), 1)
+		return
+	end
+	if not victim or victim.team == a.team or held then
+		if a.player then label(a, "Personne à tacler", Color3.fromRGB(220, 220, 220), 0.8) end
+		return
+	end
+	-- No tackling the taker of a restart
+	if phase == "set" then return end
+	act(a, "tackle", 0.45)
+	local ox, oy = posOf(victim)
+	-- 2.6 m: the server sees a human's position a little late
+	if dist2(px, py, ox, oy) > (if a.player then 2.6 else 2.3) then
+		if a.player then label(a, "Trop loin", Color3.fromRGB(255, 220, 160), 0.8) end
+		stunActor(a, 0.25)
+		return
+	end
+	local behind = fromBehind(a, victim)
+	if rng:NextNumber() < 0.55 then
+		stunActor(victim, 0.7)
+		act(victim, "trip", 0.7)
+		victim.cool = 0.6
+		local fx, fy = facingOf(a)
+		owner = nil
+		ball.x, ball.y = math.clamp(ox, 0.15, L - 0.15), math.clamp(oy, 0.15, W - 0.15)
+		ball.vx, ball.vy, ball.vz = fx * 4, fy * 4, 0
+		lastTouch = a
+		a.cool = 0.1
+		say("Tacle réussi !", a.name, 0.9)
+		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
+	else
+		label(a, "Tacle raté", Color3.fromRGB(255, 120, 100), 1)
+		stunActor(a, if a.player then 0.35 else 0.6)
+		if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
+	end
+end
+
+-- ---------- Skill moves (the web game's 31 dribbles, Shared.Dribbles) ----------
+-- The move is picked here with its chance of success and its result rolled at once; the model's attributes
+-- (Drib, DribAt, DribF/DribS = forward and side directions, DribV0) tell every machine to play it: the body's
+-- animation (client/Bodies), the ball at the feet (client/BallView) and, for a human, his own movement
+-- (client/Controls). The server moves the computer players and applies the outcome when the move reaches it.
+local dribbler: Actor? = nil -- after a knock or a flick, he gets first claim on the ball until dribblerT
+local dribblerT = 0
+
+local function now(): number return workspace:GetServerTimeNow() end
+
+local function nearestOpp(a: Actor): (Actor?, number)
+	local x, y = posOf(a)
+	local best, bd = nil, math.huge
+	for _, o in actors do
+		if o.team == a.team or not o.root then continue end
+		local ox, oy = posOf(o)
+		local d = dist2(x, y, ox, oy)
+		if d < bd then best, bd = o, d end
+	end
+	return best, bd
 end
 
 local TIER_COLOR = {
@@ -970,7 +987,18 @@ local function chaserOf(t: number): Actor?
 		local d = dist2(x, y, ball.x + ball.vx * 0.3, ball.y + ball.vy * 0.3)
 		if d < bd then best, bd = a, d end
 	end
-	if best and best.player then return nil end
+	if best and best.player then
+		-- The human goes for it himself when he is close; otherwise the nearest computer player of his side goes
+		if bd < 6 then return nil end
+		local bot, bb = nil, math.huge
+		for _, a in actors do
+			if a.team ~= t or a.role == "GK" or not a.root or a.stun > 0 or a.player then continue end
+			local x, y = posOf(a)
+			local d = dist2(x, y, ball.x, ball.y)
+			if d < bb then bot, bb = a, d end
+		end
+		return bot
+	end
 	return best
 end
 
@@ -1181,7 +1209,10 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	a.warned = false
 	if kind == "active" then return end
 	if phase ~= "play" and phase ~= "set" then return end
-	if a.stun > 0 then return end
+	if a.stun > 0 then
+		if kind == "tackle" then label(a, "Pas encore…", Color3.fromRGB(220, 220, 220), 0.6) end
+		return
+	end
 	dx = if type(dx) == "number" and dx == dx then dx else 0
 	dz = if type(dz) == "number" and dz == dz then dz else 0
 	power = if type(power) == "number" and power == power then math.clamp(power, 0, 1) else 0.5
@@ -1292,6 +1323,10 @@ RunService.Heartbeat:Connect(function(dt)
 		end
 		kickoff(1)
 	end
+
+	-- A restart whose ball nobody has any more (the taker dribbled or was tackled): play goes on, so that everybody
+	-- goes for it again (in "set", nobody chases the ball)
+	if phase == "set" and not owner and phaseT > 0.5 then phase = "play"; publish() end
 
 	-- A computer player takes the restart after a short pause; a human has 10 s before it is played for him
 	if phase == "set" and setTaker and owner == setTaker then
