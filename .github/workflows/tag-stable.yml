@@ -1,4 +1,5 @@
 # Marks a state of the game known to be good with a tag stable-N (stable-1, stable-2...), to come back to it later.
+# Only run by hand, when the owner asks for it: merging into main never tags anything.
 # Actions > Tag stable > Run workflow: by default the current main gets the next number.
 # To go back to a stable state: merge (or reset a branch to) the tag, e.g. git checkout -b fix stable-3.
 name: Tag stable
