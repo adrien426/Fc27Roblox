@@ -48,11 +48,36 @@ local function button(parent: Instance, text: string, color: Color3, textColor: 
 	return b
 end
 
+-- A coin drawn with frames (the 🪙 emoji does not exist in the game's fonts and shows as a box)
+local function coinIcon(parent: Instance, size: number, pos: UDim2)
+	local c = Instance.new("Frame")
+	c.Size = UDim2.fromOffset(size, size)
+	c.Position = pos
+	c.AnchorPoint = Vector2.new(0, 0.5)
+	c.BackgroundColor3 = GOLD
+	c.Parent = parent
+	Instance.new("UICorner", c).CornerRadius = UDim.new(1, 0)
+	local ring = Instance.new("UIStroke")
+	ring.Color = Color3.fromRGB(170, 120, 20)
+	ring.Thickness = math.max(1, size / 9)
+	ring.Parent = c
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Text = "C"
+	t.TextScaled = true
+	t.Font = Enum.Font.GothamBlack
+	t.TextColor3 = Color3.fromRGB(150, 100, 10)
+	t.Parent = c
+	return c
+end
+
 -- ---------- Coins in the corner, and what you just earned ----------
 local coins = label(gui, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -130, 0, 8), Size = UDim2.fromOffset(110, 32),
-	BackgroundTransparency = 0.15, BackgroundColor3 = DARK, Text = "🪙 0", TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GOLD })
+	BackgroundTransparency = 0.15, BackgroundColor3 = DARK, Text = "      0", TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GOLD })
+coinIcon(coins, 18, UDim2.new(0, 10, 0.5, 0))
 Instance.new("UICorner", coins).CornerRadius = UDim.new(0, 8)
-local function showCoins() coins.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) end
+local function showCoins() coins.Text = "      " .. tostring(player:GetAttribute("Coins") or 0) end
 player:GetAttributeChangedSignal("Coins"):Connect(showCoins)
 showCoins()
 player:GetAttributeChangedSignal("CoinGainAt"):Connect(function()
@@ -60,7 +85,7 @@ player:GetAttributeChangedSignal("CoinGainAt"):Connect(function()
 	local why = player:GetAttribute("CoinReason")
 	if type(n) ~= "number" then return end
 	local pop = label(gui, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -130, 0, 44), Size = UDim2.fromOffset(160, 24),
-		Text = `+{n} 🪙 {REASON[why] or ""}`, TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GREEN, TextXAlignment = Enum.TextXAlignment.Right })
+		Text = `+{n} pièces · {REASON[why] or ""}`, TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GREEN, TextXAlignment = Enum.TextXAlignment.Right })
 	TweenService:Create(pop, TweenInfo.new(1.6), { Position = UDim2.new(1, -130, 0, 80), TextTransparency = 1 }):Play()
 	task.delay(1.7, function() pop:Destroy() end)
 end)
@@ -83,7 +108,7 @@ local banner = label(panel, { Size = UDim2.new(1, -230, 0, 18), Position = UDim2
 	TextXAlignment = Enum.TextXAlignment.Left, Text = "" })
 local status = label(panel, { Size = UDim2.new(1, -32, 0, 18), Position = UDim2.new(0, 16, 1, -24), TextSize = 13, TextColor3 = GREEN,
 	TextXAlignment = Enum.TextXAlignment.Left, Text = "Tout est cosmétique : rien ne rend plus fort, tout se voit sur le terrain." })
-local close = button(panel, "✕", Color3.fromRGB(60, 66, 74), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(34, 34), Position = UDim2.new(1, -44, 0, 8), TextSize = 18 })
+local close = button(panel, "X", Color3.fromRGB(60, 66, 74), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(34, 34), Position = UDim2.new(1, -44, 0, 8), TextSize = 18 })
 
 local list = Instance.new("ScrollingFrame")
 list.Size = UDim2.new(1, -24, 1, -78)
@@ -159,9 +184,10 @@ render = function()
 		if not isOwned then
 			local r = button(card, `{it.robux} R$`, Color3.fromRGB(40, 170, 90), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(84, 30), Position = UDim2.new(1, -186, 0, 11) })
 			r.Activated:Connect(function() call("buy", it.id, "robux") end)
-			local c = button(card, `🪙 {it.coins}`, if have >= it.coins then GOLD else Color3.fromRGB(70, 70, 70), DARK,
+			local c = button(card, `     {it.coins}`, if have >= it.coins then GOLD else Color3.fromRGB(70, 70, 70), DARK,
 				{ Size = UDim2.fromOffset(90, 30), Position = UDim2.new(1, -96, 0, 11) })
 			c.Activated:Connect(function() call("buy", it.id, "coins") end)
+			coinIcon(c, 16, UDim2.new(0, 8, 0.5, 0))
 		elseif it.choices and it.slot then
 			choiceRow(card, 52, it.slot, it.choices, equip[it.slot])
 			if it.id == "style" then choiceRow(card, 82, "kit", Shop.KITS, equip.kit) end
@@ -174,7 +200,7 @@ render = function()
 	packs.BackgroundColor3 = Color3.fromRGB(44, 38, 20)
 	packs.Parent = list
 	Instance.new("UICorner", packs).CornerRadius = UDim.new(0, 8)
-	label(packs, { Size = UDim2.fromOffset(150, 50), Position = UDim2.fromOffset(10, 0), Text = "Pièces 🪙", TextSize = 15, Font = Enum.Font.GothamBlack,
+	label(packs, { Size = UDim2.fromOffset(150, 50), Position = UDim2.fromOffset(10, 0), Text = "Pièces", TextSize = 15, Font = Enum.Font.GothamBlack,
 		TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = GOLD })
 	for i, p in Shop.PACKS do
 		local b = button(packs, `+{p.coins} · {p.robux} R$`, Color3.fromRGB(40, 170, 90), Color3.new(1, 1, 1),
@@ -197,7 +223,7 @@ local dismissed = false
 close.Activated:Connect(function() show(false); dismissed = true end)
 RunService.Heartbeat:Connect(function()
 	local inMatch = player:GetAttribute("InMatch") == true
-	open.Visible = not inMatch
+	open.Visible = not inMatch and not panel.Visible
 	if inMatch then
 		if panel.Visible then show(false) end
 		return
