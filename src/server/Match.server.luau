@@ -218,7 +218,8 @@ local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: numb
 	owner, held = nil, false
 	local fx, fy = facingOf(a)
 	local x, y = posOf(a)
-	ball.x, ball.y = x + fx * 0.7, y + fy * 0.7
+	-- Struck from in front of him, but never from behind a line (a keeper clearing while facing his own goal)
+	ball.x, ball.y = math.clamp(x + fx * 0.7, 0.15, L - 0.15), math.clamp(y + fy * 0.7, 0.15, W - 0.15)
 	ball.z = math.max(ball.z, 0.11)
 	ball.vx, ball.vy, ball.vz, ball.spin, ball.tspin = vx, vy, vz, spin or 0, 0
 	a.cool = 0.35
@@ -426,7 +427,7 @@ local function doTackle(a: Actor)
 		victim.cool = 0.6
 		local fx, fy = facingOf(a)
 		owner = nil
-		ball.x, ball.y = ox, oy
+		ball.x, ball.y = math.clamp(ox, 0.15, L - 0.15), math.clamp(oy, 0.15, W - 0.15)
 		ball.vx, ball.vy, ball.vz = fx * 4, fy * 4, 0
 		lastTouch = a
 		a.cool = 0.1
@@ -1223,8 +1224,16 @@ RunService.Heartbeat:Connect(function(dt)
 					ball.x, ball.y, ball.z = x + fx * 0.75, y + fy * 0.75, 0
 				end
 				ball.vx, ball.vy, ball.vz = vx, vy, 0
-				-- Carried over a line: goal (walked in between the posts), corner, goal kick or throw-in
-				if phase == "play" and not held then checkBounds(prevX) end
+				-- Like the web game, a ball at someone's feet stays on the pitch: only an attacker can carry it over
+				-- the opponent's goal line between the posts (a walked-in goal). Otherwise a defender facing his
+				-- own goal would have it behind his line, and the next touch scored for the other team.
+				if not held then
+					ball.y = math.clamp(ball.y, 0.15, W - 0.15)
+					local intoGoal = math.abs(ball.y - W / 2) < GH
+					if not (intoGoal and dir[a.team] > 0) then ball.x = math.min(ball.x, L - 0.15) end
+					if not (intoGoal and dir[a.team] < 0) then ball.x = math.max(ball.x, 0.15) end
+					if phase == "play" then checkBounds(prevX) end
+				end
 			end
 		else
 			local px = ball.x
