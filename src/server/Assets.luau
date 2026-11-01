@@ -22,18 +22,12 @@ local serverFolder = folder(ServerStorage)
 local sharedFolder = folder(ReplicatedStorage)
 
 -- LoadAsset returns a Model wrapping what was uploaded: that content becomes a single Model named `name`
-local function load(name: string, id: number, parent: Instance): Model?
-	if id <= 0 then return nil end
-	local ok, res = pcall(function() return InsertService:LoadAsset(id) end)
-	if not ok or not res then
-		warn(`[FC27] Could not load the {name} model (asset {id}): {res}`)
-		return nil
-	end
-	local wrapper = res :: Model
+local function prepare(name: string, wrapper: Model, parent: Instance): Model
 	local kids = wrapper:GetChildren()
 	local m: Model
 	if #kids == 1 and kids[1]:IsA("Model") then
 		m = kids[1] :: Model
+		m.Parent = nil -- out of the wrapper first: destroying the wrapper would lock it
 	else
 		m = Instance.new("Model")
 		for _, c in kids do c.Parent = m end
@@ -51,6 +45,22 @@ local function load(name: string, id: number, parent: Instance): Model?
 		end
 	end
 	m.Parent = parent
+	return m
+end
+
+-- Never throws: any problem is reported in the console and the model is left out
+local function load(name: string, id: number, parent: Instance): Model?
+	if id <= 0 then return nil end
+	local ok, res = pcall(function() return InsertService:LoadAsset(id) end)
+	if not ok or not res then
+		warn(`[FC27] Could not load the {name} model (asset {id}): {res}`)
+		return nil
+	end
+	local ok2, m = pcall(prepare, name, res :: Model, parent)
+	if not ok2 then
+		warn(`[FC27] Could not prepare the {name} model (asset {id}): {m}`)
+		return nil
+	end
 	return m
 end
 
