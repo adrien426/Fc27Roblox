@@ -123,6 +123,31 @@ local function report(msg: string)
 	warn("[FC27] " .. msg)
 end
 
+-- Another human's name above his head, in his team's colour, so that you can find him among the computer players
+local function nameTag(model: Model, root: BasePart?)
+	local pl = game:GetService("Players"):GetPlayerFromCharacter(model)
+	if not pl or pl == game:GetService("Players").LocalPlayer or not root then return end
+	local r = root :: BasePart
+	if r:FindFirstChild("FC27Name") then return end
+	local team = Config.TEAMS[model:GetAttribute("Team") :: number or 1]
+	local g = Instance.new("BillboardGui")
+	g.Name = "FC27Name"
+	g.Size = UDim2.fromOffset(200, 26)
+	g.StudsOffsetWorldSpace = Vector3.new(0, 4.2, 0)
+	g.AlwaysOnTop = true
+	g.MaxDistance = 400
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Text = "▼ " .. pl.DisplayName
+	t.TextScaled = true
+	t.Font = Enum.Font.GothamBlack
+	t.TextColor3 = if team then team.color:Lerp(Color3.new(1, 1, 1), 0.35) else Color3.new(1, 1, 1)
+	t.TextStrokeTransparency = 0.3
+	t.Parent = g
+	g.Parent = r
+end
+
 local function add(inst: Instance, tries: number?)
 	if not inst:IsA("Model") then return end
 	local body = inst :: Model
@@ -166,6 +191,7 @@ local function add(inst: Instance, tries: number?)
 	}
 	bodies[model] = st
 	makePlate(st)
+	nameTag(model, root)
 end
 
 local function remove(body: Instance)
