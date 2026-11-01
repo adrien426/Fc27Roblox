@@ -76,4 +76,4 @@ end
 local m = wrapper:FindFirstChildWhichIsA("Model") or wrapper
 local cf, size = (m :: Model):GetBoundingBox()
 print(`BOX {m.Name}: centre {v3(cf.Position)} size {v3(size)} rot {rot(cf)}`)
-return "done"
+return "done" -- player
