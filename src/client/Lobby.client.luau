@@ -54,7 +54,7 @@ local close = Instance.new("TextButton")
 close.Size = UDim2.fromOffset(36, 36)
 close.Position = UDim2.new(1, -46, 0, 8)
 close.BackgroundColor3 = Color3.fromRGB(60, 66, 74)
-close.Text = "✕"
+close.Text = "X"
 close.TextColor3 = Color3.new(1, 1, 1)
 close.Font = Enum.Font.GothamBlack
 close.TextSize = 18
@@ -105,7 +105,7 @@ local function render()
 			label(row, { Size = UDim2.new(0.62, 0, 1, 0), Position = UDim2.fromOffset(6, 0), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left,
 				Text = `{p.num}  {ROLE[p.role] or p.role}`, TextColor3 = if free then Color3.new(1, 1, 1) else Color3.fromRGB(170, 176, 184) })
 			label(row, { Size = UDim2.new(0.38, -6, 1, 0), Position = UDim2.new(0.62, 0, 0, 0), TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right,
-				Text = if p.human then p.name elseif p.role == "GK" then "robot" else "libre ▸",
+				Text = if p.human then (if p.vip then "★ " else "") .. p.name elseif p.role == "GK" then "robot" else "libre  »",
 				TextColor3 = if p.human then GOLD elseif free then Color3.fromRGB(140, 230, 150) else Color3.fromRGB(150, 150, 150) })
 			if free then
 				row.Activated:Connect(function()
@@ -127,7 +127,7 @@ end
 Net:GetAttributeChangedSignal("Lineups"):Connect(function() if panel.Visible then render() end end)
 
 -- ---------- The ring ----------
-local dismissed = false -- closed with ✕: it opens again after stepping out of the ring and back in
+local dismissed = false -- closed with X: it opens again after stepping out of the ring and back in
 close.Activated:Connect(function() panel.Visible = false; dismissed = true end)
 RunService.Heartbeat:Connect(function()
 	if player:GetAttribute("InMatch") == true then

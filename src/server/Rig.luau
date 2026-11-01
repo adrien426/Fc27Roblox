@@ -185,8 +185,12 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	local old = model:FindFirstChild("Body")
 	if old then old:Destroy() end
 	local team = Config.TEAMS[teamIdx]
-	-- The keeper (shirt number 1) wears his own colour, so that he stands out
+	-- The keeper (shirt number 1) wears his own colour, so that he stands out; a shop shirt (KitTint) shades the
+	-- team colour without hiding it, shop boots (BootsColor) replace the random ones
 	local kit = if num == 1 then team.gk else team.color
+	local tintAttr = model:GetAttribute("KitTint")
+	if typeof(tintAttr) == "Color3" and num ~= 1 then kit = kit:Lerp(tintAttr, 0.55) end
+	local bootsAttr = model:GetAttribute("BootsColor")
 	local body = tpl:Clone()
 	body.Name = "Body"
 
@@ -197,7 +201,7 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	-- Kit and looks: shirt and socks in the team colour, shorts, boots, skin tone, hair colour or a shaved head
 	local skin = SKIN[rng:NextInteger(1, #SKIN)]
 	local hair = HAIR[rng:NextInteger(1, #HAIR)]
-	local boot = BOOTS[rng:NextInteger(1, #BOOTS)]
+	local boot = if typeof(bootsAttr) == "Color3" then bootsAttr else BOOTS[rng:NextInteger(1, #BOOTS)]
 	local shaved = rng:NextNumber() < 0.2
 	for _, p in body:GetDescendants() do
 		if not p:IsA("BasePart") then continue end

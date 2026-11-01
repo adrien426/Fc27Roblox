@@ -101,6 +101,38 @@ task.spawn(function()
 	Net:GetAttributeChangedSignal("MatchBall"):Connect(function() useBall(Net:GetAttribute("MatchBall") :: string?) end)
 end)
 
+-- Shot trail (shop): behind the ball for a moment after a strike by someone who bought it (Net attributes Trail,
+-- TrailAt): fire, stars or ice
+local Shop = require(Shared:WaitForChild("Shop"))
+local a0 = Instance.new("Attachment")
+a0.Position = Vector3.new(0, R * 0.6, 0)
+a0.Parent = ball
+local a1 = Instance.new("Attachment")
+a1.Position = Vector3.new(0, -R * 0.6, 0)
+a1.Parent = ball
+local trail = Instance.new("Trail")
+trail.Attachment0 = a0
+trail.Attachment1 = a1
+trail.Lifetime = 0.45
+trail.LightEmission = 1
+trail.FaceCamera = true
+trail.Enabled = false
+trail.Parent = ball
+local sparks = Instance.new("ParticleEmitter")
+sparks.Rate = 0
+sparks.Lifetime = NumberRange.new(0.3, 0.6)
+sparks.Speed = NumberRange.new(1, 3)
+sparks.Size = NumberSequence.new(0.35, 0)
+sparks.LightEmission = 1
+sparks.Parent = ball
+local function trailOn(): string?
+	local kind = Net:GetAttribute("Trail")
+	local at = Net:GetAttribute("TrailAt")
+	if type(kind) ~= "string" or type(at) ~= "number" then return nil end
+	if workspace:GetServerTimeNow() - at > 1.6 then return nil end
+	return kind
+end
+
 local shadow = Instance.new("Part")
 shadow.Name = "FC27BallShadow"
 shadow.Shape = Enum.PartType.Cylinder
@@ -175,6 +207,20 @@ RunService.RenderStepped:Connect(function(dt)
 		spin = CFrame.fromAxisAngle(moved.Unit:Cross(Vector3.yAxis), -moved.Magnitude / R) * spin
 	end
 	ball.CFrame = CFrame.new(shown) * spin
+	local kind = trailOn()
+	local fast = (want - shown).Magnitude > 0.05 or math.sqrt(state.vx ^ 2 + state.vy ^ 2) > 8
+	if kind and fast and not ownerModel then
+		local c = Shop.choice("trail", kind)
+		local col = if c and c.color then c.color :: Color3 else Color3.new(1, 1, 1)
+		trail.Color = ColorSequence.new(col, if kind == "fire" then Color3.fromRGB(200, 30, 10) else Color3.new(1, 1, 1))
+		trail.Transparency = NumberSequence.new(0.1, 1)
+		trail.Enabled = true
+		sparks.Color = ColorSequence.new(col)
+		sparks.Rate = if kind == "stars" then 60 else 25
+	else
+		trail.Enabled = false
+		sparks.Rate = 0
+	end
 	shadow.CFrame = CFrame.new(Vector3.new(shown.X, Config.GROUND_Y + 0.13, shown.Z)) * CFrame.Angles(0, 0, math.pi / 2)
 	local h = math.max(0, shown.Y - Config.GROUND_Y)
 	shadow.Transparency = math.clamp(0.5 + h / 40, 0.5, 0.92)

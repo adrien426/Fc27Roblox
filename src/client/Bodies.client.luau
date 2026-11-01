@@ -33,6 +33,10 @@ local ACTS: { [string]: Window } = {
 	diveL = { clip = "diveL", from = 0.93, to = 2.1, rest = 2.9 },
 	diveR = { clip = "diveR", from = 0.93, to = 1.43, rest = 2.3 },
 	siuu = { clip = "siuu", from = 0, to = 2.95 },
+	-- Celebrations bought in the shop (Shared.Shop)
+	dance = { clip = "dance", from = 0, to = 4 },
+	victory = { clip = "victory", from = 0, to = 4.4 },
+	clap = { clip = "clap", from = 0, to = 4 },
 }
 
 -- Locomotion: speeds in metres per second at which each clip plays at its normal pace
@@ -139,10 +143,12 @@ local function nameTag(model: Model, root: BasePart?)
 	local t = Instance.new("TextLabel")
 	t.Size = UDim2.fromScale(1, 1)
 	t.BackgroundTransparency = 1
-	t.Text = "▼ " .. pl.DisplayName
+	local vip = pl:GetAttribute("VIP") == true
+	t.Text = (if vip then "★ " else "▼ ") .. pl.DisplayName
 	t.TextScaled = true
 	t.Font = Enum.Font.GothamBlack
-	t.TextColor3 = if team then team.color:Lerp(Color3.new(1, 1, 1), 0.35) else Color3.new(1, 1, 1)
+	-- VIPs (shop) have their name in gold
+	t.TextColor3 = if vip then Color3.fromRGB(242, 194, 48) elseif team then team.color:Lerp(Color3.new(1, 1, 1), 0.35) else Color3.new(1, 1, 1)
 	t.TextStrokeTransparency = 0.3
 	t.Parent = g
 	g.Parent = r

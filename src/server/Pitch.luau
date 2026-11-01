@@ -361,6 +361,45 @@ function Pitch.buildLobby(): Folder
 	t.Font = Enum.Font.GothamBlack
 	t.TextColor3 = Color3.fromRGB(242, 194, 48)
 	t.Parent = gui
+
+	local function signText(p: BasePart, face: Enum.NormalId, text: string, color: Color3)
+		local g = Instance.new("SurfaceGui")
+		g.Face = face
+		g.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		g.PixelsPerStud = 20
+		g.Parent = p
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.fromScale(1, 1)
+		l.BackgroundTransparency = 1
+		l.Text = text
+		l.TextScaled = true
+		l.Font = Enum.Font.GothamBlack
+		l.TextColor3 = color
+		l.Parent = g
+	end
+
+	-- The shop: a counter on the left, near the spawn (client/Shop opens when you walk up to it)
+	local shopPos = o + Vector3.new(-WID / 2 + 9, 0, LEN / 2 - 40)
+	part(root, { Name = "ShopCounter", Size = Vector3.new(6, 4, 14), CFrame = CFrame.new(shopPos + Vector3.new(0, 2, 0)), Color = Color3.fromRGB(242, 194, 48), Material = Enum.Material.Wood })
+	local shopSign = part(root, { Name = "ShopSign", Size = Vector3.new(1, 5, 16), CFrame = CFrame.new(shopPos + Vector3.new(-3, 9, 0)), Color = Color3.fromRGB(14, 24, 18) })
+	signText(shopSign, Enum.NormalId.Right, "🛒 BOUTIQUE", Color3.fromRGB(242, 194, 48))
+	local shopZone = part(root, { Name = "ShopZone", Size = Vector3.new(16, 0.2, 18), CFrame = CFrame.new(shopPos + Vector3.new(7, 0.1, 0)), Color = Color3.fromRGB(242, 194, 48),
+		Material = Enum.Material.Neon, Transparency = 0.7, CanCollide = false })
+	shopZone:SetAttribute("Shop", true)
+
+	-- The VIP corner on the right: gold carpet behind a rope, only VIPs may stand there (the server walks the
+	-- others out, see MatchCore)
+	local vipPos = o + Vector3.new(WID / 2 - 12, 0, 0)
+	local vipZone = part(root, { Name = "VipZone", Size = Vector3.new(20, 0.3, 34), CFrame = CFrame.new(vipPos + Vector3.new(0, 0.15, 0)), Color = Color3.fromRGB(200, 150, 30),
+		Material = Enum.Material.Fabric, CanCollide = false })
+	vipZone:SetAttribute("Vip", true)
+	part(root, { Name = "VipSofa", Size = Vector3.new(5, 3, 20), CFrame = CFrame.new(vipPos + Vector3.new(7, 1.5, 0)), Color = Color3.fromRGB(120, 20, 30), Material = Enum.Material.Fabric })
+	for _, z in { -17, 17 } do
+		part(root, { Name = "Post", Size = Vector3.new(0.6, 4, 0.6), CFrame = CFrame.new(vipPos + Vector3.new(-10, 2, z)), Color = Color3.fromRGB(230, 190, 60), Material = Enum.Material.Metal })
+	end
+	part(root, { Name = "Rope", Size = Vector3.new(0.3, 0.3, 34), CFrame = CFrame.new(vipPos + Vector3.new(-10, 3.4, 0)), Color = Color3.fromRGB(150, 20, 30), CanCollide = false })
+	local vipSign = part(root, { Name = "VipSign", Size = Vector3.new(1, 5, 14), CFrame = CFrame.new(vipPos + Vector3.new(9.5, 10, 0)), Color = Color3.fromRGB(14, 24, 18) })
+	signText(vipSign, Enum.NormalId.Left, "★ VIP", Color3.fromRGB(242, 194, 48))
 	return root
 end
 

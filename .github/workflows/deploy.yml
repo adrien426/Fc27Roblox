@@ -74,10 +74,20 @@ jobs:
         run: node upload-assets.mjs
 
       # Also after a partial failure: the assets already created must keep their ids, or they would be created again
+      # The shop's game passes and coin packs on Roblox (created once, found again by name; ids written into
+      # src/shared/ShopIds.luau and committed with the asset ids). Real items on every branch: only the game's
+      # creators get them free (server/Economy).
+      - name: Create the shop's passes and coin packs
+        id: shop
+        continue-on-error: true
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+        run: node scripts/create-shop.mjs
+
       - name: Commit the asset ids
         if: ${{ !cancelled() && steps.upload.outcome != 'skipped' }}
         run: |
-          git add src/shared/AssetIds.luau assets/uploaded.json
+          git add src/shared/AssetIds.luau assets/uploaded.json src/shared/ShopIds.luau
           if git diff --cached --quiet; then echo "Asset ids unchanged"; exit 0; fi
           git -c user.name="github-actions[bot]" -c user.email="41898341+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "Update Roblox asset ids"
