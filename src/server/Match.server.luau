@@ -50,6 +50,9 @@ local Message = remote("Message") :: RemoteEvent
 Net.Parent = ReplicatedStorage
 
 Pitch.build(Assets.stadium)
+-- Characters only appear once the pitch is there (Players.CharacterAutoLoads is off in the place file): the
+-- server first loads the models, which takes a few seconds, and a character spawned before would fall
+Players.CharacterAutoLoads = true
 local botFolder = Instance.new("Folder")
 botFolder.Name = "Bots"
 botFolder.Parent = workspace
@@ -777,6 +780,10 @@ end
 
 Players.PlayerAdded:Connect(assignPlayer)
 for _, pl in Players:GetPlayers() do task.spawn(assignPlayer, pl) end
+-- Those who arrived while the pitch was being built get their character now
+for _, pl in Players:GetPlayers() do
+	if not pl.Character then task.spawn(function() pl:LoadCharacter() end) end
+end
 
 Players.PlayerRemoving:Connect(function(pl)
 	local a = actorOfPlayer(pl)

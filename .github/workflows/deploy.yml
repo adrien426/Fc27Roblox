@@ -99,6 +99,7 @@ jobs:
 
       - name: Check the Luau code and build the place
         run: |
+          echo "return \"${GITHUB_SHA::7} · $(date -u +%d/%m %H:%M)\"" > src/shared/Version.luau
           tools/rojo sourcemap default.project.json -o sourcemap.json
           tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
           tools/rojo build default.project.json -o Fc27.rbxlx
@@ -111,12 +112,22 @@ jobs:
           node scripts/publish-place.mjs --file Fc27.rbxlx | tee publish.log
           url="https://www.roblox.com/games/$ROBLOX_PLACE_ID"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+          # Running servers keep the old version until they close: restart them so everyone gets this one
+          code=$(curl -s -o restart.log -w '%{http_code}' -X POST -H "x-api-key: $ROBLOX_API_KEY" -H 'Content-Type: application/json' \
+            -d '{}' "https://apis.roblox.com/cloud/v2/universes/$ROBLOX_UNIVERSE_ID:restartServers")
+          if [ "$code" = 200 ]; then restarted="Serveurs en cours redémarrés : tout le monde passe sur cette version."
+          else
+            echo "::warning::Could not restart the running servers ($code $(cat restart.log)). Give the API key the universe:write permission."
+            restarted="⚠️ Les serveurs déjà ouverts n'ont pas pu être redémarrés ($code) : ils gardent l'ancienne version jusqu'à leur fermeture."
+          fi
           {
             echo "### Déployé sur l'expérience ${{ github.ref_name == 'main' && 'de production' || 'de test' }}"
             echo ""
             echo "$(grep -E '^(Published|Saved)' publish.log) · commit ${GITHUB_SHA::7}"
             echo ""
             echo "Jouer : $url"
+            echo ""
+            echo "$restarted"
             echo ""
             echo "Les modèles et sons qui viennent d'être uploadés passent par la modération Roblox : ils peuvent mettre quelques minutes à apparaître."
           } >> "$GITHUB_STEP_SUMMARY"
