@@ -1,6 +1,8 @@
 --!strict
 -- The web game's recorded sounds (sounds/*.mp3, uploaded to Roblox: ids in Shared.AssetIds): crowd bed all match
--- long, the referee's whistle at kick-offs, half time and full time, a roar and the fans' chant after a goal.
+-- long, louder for a moment on a shot, a save, a skill move or a card (Net attribute Crowd), the referee's whistle
+-- at kick-offs, restarts after a foul, half time and full time, a roar and the fans' chant after a goal.
+-- No footsteps: Roblox's default character sounds are replaced by an empty script (src/stubs).
 -- A sound that is not uploaded (id 0) is skipped.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -70,4 +72,24 @@ end)
 Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
 	if roar then (roar :: Sound):Play() end
 	sing()
+end)
+
+-- The crowd rises for a moment (shot, save, dribble, card…), then settles back
+local BED = 0.35
+local swellTween: Tween? = nil
+Net:GetAttributeChangedSignal("CrowdAt"):Connect(function()
+	if not bed then return end
+	local b = bed :: Sound
+	local a = Net:GetAttribute("Crowd")
+	local amount = if type(a) == "number" then math.clamp(a, 0, 1) else 0.3
+	if swellTween then (swellTween :: Tween):Cancel() end
+	b.Volume = BED + amount * 0.55
+	swellTween = TweenService:Create(b, TweenInfo.new(2.2 + amount * 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = BED })
+	;(swellTween :: Tween):Play()
+end)
+
+-- A whistle for fouls (free kicks and penalties)
+Net:GetAttributeChangedSignal("SetKind"):Connect(function()
+	local k = Net:GetAttribute("SetKind")
+	if k == "freekick" or k == "penalty" then blow(1) end
 end)

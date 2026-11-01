@@ -27,6 +27,9 @@
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
+        },
+        "RbxCharacterSounds": {
+          "$path": "src/stubs/RbxCharacterSounds.client.luau"
         }
       }
     },
