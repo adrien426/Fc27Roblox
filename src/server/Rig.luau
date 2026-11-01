@@ -189,7 +189,7 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	body.Name = "Body"
 
 	-- Height: the model's own (in the bind pose, the model's box is its height)
-	local _, size0 = body:GetBoundingBox()
+	local _, size0 = Skeleton.meshBox(body)
 	body:ScaleTo(body:GetScale() * Config.PLAYER_HEIGHT * Config.M / math.max(0.1, size0.Y))
 
 	-- Kit and looks: shirt and socks in the team colour, shorts, boots, skin tone, hair colour or a shaved head
@@ -211,7 +211,7 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 
 	-- Feet on the ground: an R15 root floats HipHeight + half its height above it, an R6 root stands on 2-stud legs.
 	-- Facing where the character faces (from the hip bones; without them, a Mixamo model faces +Z).
-	local cf, size = body:GetBoundingBox()
+	local cf, size = Skeleton.meshBox(body)
 	local hip = if hum and hum.RigType == Enum.HumanoidRigType.R15 then hum.HipHeight else 2
 	local base = cf * CFrame.new(0, -size.Y / 2, 0)
 	local turn = CFrame.Angles(0, math.pi, 0)

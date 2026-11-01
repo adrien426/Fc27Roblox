@@ -34,6 +34,13 @@ local function prepare(name: string, wrapper: Model, parent: Instance): Model
 	end
 	wrapper:Destroy()
 	m.Name = name
+	-- The importer's "RootPart" (a 2 x 2 x 1 block at the model's origin): removed when it holds no bones, otherwise
+	-- (the footballer's skeleton hangs from it) kept but invisible
+	for _, d in m:GetDescendants() do
+		if d.Name == "RootPart" and d.ClassName == "Part" then
+			if d:FindFirstChildWhichIsA("Bone", true) then (d :: Part).Transparency = 1 else d:Destroy() end
+		end
+	end
 	for _, d in m:GetDescendants() do
 		if d:IsA("BasePart") then
 			d.Anchored = true

@@ -1,0 +1,40 @@
+# Runs a Luau script from scripts/inspect/ on a server of the TEST experience (Open Cloud Luau Execution) and shows
+# what it prints: a look inside the live game without Studio. Actions > Inspect the test game > Run workflow,
+# or push a change to a script in scripts/inspect/ (then every changed script runs).
+name: Inspect the test game
+
+on:
+  push:
+    branches-ignore: [main, test]
+    paths: ['scripts/inspect/**']
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Script in scripts/inspect/
+        default: player.luau
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the script on a Roblox server
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_TEST_UNIVERSE_ID || vars.ROBLOX_TEST_UNIVERSE_ID || secrets.ROBLOX_UNIVERSE_ID || vars.ROBLOX_UNIVERSE_ID }}
+          ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_TEST_PLACE_ID || vars.ROBLOX_TEST_PLACE_ID || secrets.ROBLOX_PLACE_ID || vars.ROBLOX_PLACE_ID }}
+          BEFORE: ${{ github.event.before }}
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          if [ -n "$SCRIPT" ]; then list="scripts/inspect/$SCRIPT"
+          else list=$(git diff --name-only "$BEFORE" HEAD -- scripts/inspect 2>/dev/null || ls scripts/inspect/*.luau); fi
+          [ -n "$list" ] || list=$(ls scripts/inspect/*.luau)
+          for f in $list; do [ -f "$f" ] || continue; echo "===== $f"; node scripts/run-luau.mjs "$f"; done
