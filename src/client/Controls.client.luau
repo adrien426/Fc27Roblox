@@ -63,6 +63,7 @@ local function press(kind: string)
 	elseif kind == "sprint" then
 		sprintHeld = true
 	elseif kind == "camera" then
+		if player:GetAttribute("InMatch") ~= true then return end -- not in the locker room
 		tvCam = not tvCam
 		if not tvCam then
 			camera.CameraType = Enum.CameraType.Custom
@@ -184,6 +185,10 @@ if UserInputService.TouchEnabled then
 		b.Parent = gui
 	end
 	local dark = Color3.fromRGB(19, 36, 26)
+	-- The match buttons only show on the pitch, not in the locker room
+	local function showButtons() gui.Enabled = player:GetAttribute("InMatch") == true end
+	player:GetAttributeChangedSignal("InMatch"):Connect(showButtons)
+	showButtons()
 	-- With the ball, the tackle button does a skill move
 	BallState.OnClientEvent:Connect(function(_s: any, o: any)
 		haveBall = o ~= nil and o == player.Character
@@ -226,6 +231,12 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 		player:SetAttribute("Stamina", stamina)
 		player:SetAttribute("Sprinting", sprinting)
+	end
+	-- Back in the locker room: the TV camera is switched off
+	if tvCam and player:GetAttribute("InMatch") ~= true then
+		tvCam = false
+		camera.CameraType = Enum.CameraType.Custom
+		if hum then camera.CameraSubject = hum end
 	end
 	-- TV camera: high on the main stand side, following the ball
 	if tvCam then
