@@ -93,7 +93,7 @@ type Actor = {
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
 	drib: any?, skillCD: number?, lastActive: number?, warned: boolean?,
-	yellow: number?, sentOff: boolean?,
+	yellow: number?, sentOff: boolean?, kicked: boolean?,
 }
 local actors: { Actor } = {}
 
@@ -203,12 +203,14 @@ end
 -- ---------- Ball ----------
 local ball: BallPhysics.Ball = { x = L / 2, y = W / 2, z = 0, vx = 0, vy = 0, vz = 0, spin = 0, tspin = 0 }
 local owner: Actor? = nil
+local lastOwner: Actor? = nil -- to tell a human when he loses the ball
 local held = false -- a goalkeeper has it in his hands
 local lastTouch: Actor? = nil
 local shotBy: number? = nil -- team of the last shot, while it flies
 local target: Actor? = nil -- intended receiver of the last pass
 
 local function resetBall(x: number, y: number)
+	if owner then (owner :: Actor).kicked = true end -- a restart, not a lost ball
 	ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz, ball.spin, ball.tspin = x, y, 0, 0, 0, 0, 0, 0
 	owner, held, shotBy, target = nil, false, nil, nil
 end
@@ -218,6 +220,7 @@ local function gauss(): number
 end
 
 local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: number?, clip: string?)
+	a.kicked = true -- his own shot or pass: not a lost ball
 	act(a, clip or (if phase == "set" and setKindNow == "throw" then "throwIn" else "kick"))
 	if phase == "set" then phase = "play" end
 	owner, held = nil, false
@@ -729,7 +732,9 @@ local function nearestOf(t: number, x: number, y: number, preferHuman: boolean?)
 	for _, a in actors do
 		if a.team ~= t or a.role == "GK" or not a.root then continue end
 		local ax, ay = posOf(a)
-		local d = dist2(ax, ay, x, y) - (if preferHuman and a.player then 12 else 0)
+		local d = dist2(ax, ay, x, y)
+		-- A human takes the restart when he is close enough to walk to it (he is not moved there)
+		if preferHuman and a.player and d < 12 then d -= 12 end
 		if d < bd then best, bd = a, d end
 	end
 	return best
@@ -835,6 +840,7 @@ local function kickoff(t: number)
 end
 
 local function goalFor(t: number)
+	if owner then (owner :: Actor).kicked = true end
 	local lt = lastTouch
 	table.insert(goalLog, {
 		team = t, clock = math.floor(clock), how = boundsHow, phase = phase,
@@ -1377,8 +1383,17 @@ RunService.Heartbeat:Connect(function(dt)
 				-- scored without a shot: an attacker pushed back by a player standing in front of the goal
 				-- (separate) went over the line with the ball, again and again.
 				if not held then
-					ball.x = math.clamp(ball.x, 0.15, L - 0.15)
+					-- A human may walk the ball into the opponent's goal between the posts (a goal); computer players
+					-- must shoot (they could be pushed over the line by a human standing in front of the goal)
 					ball.y = math.clamp(ball.y, 0.15, W - 0.15)
+					local walkIn = a.player ~= nil and math.abs(ball.y - W / 2) < GH and phase == "play"
+					if not (walkIn and dir[a.team] > 0) then ball.x = math.min(ball.x, L - 0.15) end
+					if not (walkIn and dir[a.team] < 0) then ball.x = math.max(ball.x, 0.15) end
+					if walkIn and (ball.x < 0 or ball.x > L) then
+						boundsHow = "carried"
+						checkBounds(if ball.x < 0 then 0.1 else L - 0.1)
+						boundsHow = "free"
+					end
 				end
 			end
 		else
@@ -1418,6 +1433,22 @@ RunService.Heartbeat:Connect(function(dt)
 		BallState:FireAllClients({ ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz, ball.spin, ball.tspin, if held then 1 else 0 }, o)
 		Net:SetAttribute("Clock", math.floor(clock))
 		Net:SetAttribute("Phase", phase)
+		-- What the server sees, shown small on screen next to the version (to understand a stuck ball)
+		local c1, c2 = chaserOf(1), chaserOf(2)
+		Net:SetAttribute("Debug", string.format("%s%s · ballon : %s · chasseurs : %s / %s · cible : %s",
+			phase, if phase == "set" then " " .. tostring(setKindNow) else "",
+			if owner then (owner :: Actor).name .. (if held then " (mains)" else "") else "libre",
+			if c1 then c1.name else "—", if c2 then c2.name else "—", if target then (target :: Actor).name else "—"))
+	end
+	-- A human who loses the ball is told how (a shot or pass of his own is not a loss)
+	if owner ~= lastOwner then
+		local was = lastOwner
+		if was and was.player and not was.kicked then
+			local why = if owner then `{(owner :: Actor).name} t'a pris le ballon` elseif phase == "goal" then "But" else "Balle perdue"
+			Message:FireClient(was.player, "Ballon perdu", why, 1.3)
+		end
+		if was then was.kicked = false end
+		lastOwner = owner
 	end
 end)
 

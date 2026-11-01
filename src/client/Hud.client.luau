@@ -62,9 +62,16 @@ local clockText = label(clockBox, { Size = UDim2.fromOffset(92, 26), Position = 
 local halfText = label(clockBox, { Size = UDim2.fromOffset(92, 12), Position = UDim2.fromOffset(0, 26), Text = "1re mi-temps", TextSize = 10,
 	Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(190, 196, 206) })
 
--- Build version, small, bottom left
-label(gui, { Size = UDim2.fromOffset(120, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,
-	Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.4 })
+-- Build version, small, bottom left, with what the server sees (phase, who has the ball, who goes for it): it
+-- shows on screenshots, to understand a ball nobody goes for
+local versionText = label(gui, { Size = UDim2.new(1, -12, 0, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,
+	Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.35 })
+local function showDebug()
+	local d = Net:GetAttribute("Debug")
+	versionText.Text = "v " .. Version .. (if type(d) == "string" then "   ·   " .. d else "")
+end
+Net:GetAttributeChangedSignal("Debug"):Connect(showDebug)
+showDebug()
 
 local function refresh()
 	scoreText.Text = string.format("%d – %d", Net:GetAttribute("Score1") or 0, Net:GetAttribute("Score2") or 0)
