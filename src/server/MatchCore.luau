@@ -1220,7 +1220,6 @@ RunService.Heartbeat:Connect(function(dt)
 			if not a.root then
 				owner = nil
 			else
-				local prevX = ball.x
 				local x, y = posOf(a)
 				local fx, fy = facingOf(a)
 				local vx, vy = velOf(a)
@@ -1235,15 +1234,12 @@ RunService.Heartbeat:Connect(function(dt)
 					ball.x, ball.y, ball.z = x + fx * 0.75, y + fy * 0.75, 0
 				end
 				ball.vx, ball.vy, ball.vz = vx, vy, 0
-				-- Like the web game, a ball at someone's feet stays on the pitch: only an attacker can carry it over
-				-- the opponent's goal line between the posts (a walked-in goal). Otherwise a defender facing his
-				-- own goal would have it behind his line, and the next touch scored for the other team.
+				-- A ball at someone's feet always stays on the pitch: only a shot can score. Carrying it over a line
+				-- scored without a shot: an attacker pushed back by a player standing in front of the goal
+				-- (separate) went over the line with the ball, again and again.
 				if not held then
+					ball.x = math.clamp(ball.x, 0.15, L - 0.15)
 					ball.y = math.clamp(ball.y, 0.15, W - 0.15)
-					local intoGoal = math.abs(ball.y - W / 2) < GH
-					if not (intoGoal and dir[a.team] > 0) then ball.x = math.min(ball.x, L - 0.15) end
-					if not (intoGoal and dir[a.team] < 0) then ball.x = math.max(ball.x, 0.15) end
-					if phase == "play" then boundsHow = "carried"; checkBounds(prevX); boundsHow = "free" end
 				end
 			end
 		else
