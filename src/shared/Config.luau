@@ -12,6 +12,14 @@ Config.G = 9.8
 Config.BALL_R = 0.11
 Config.GROUND_Y = 0 -- world Y of the grass
 
+-- Web game's player model: height in metres, turn so it faces where the R15 body faces (Mixamo models face +Z,
+-- Roblox characters face -Z)
+Config.PLAYER_HEIGHT = 1.8
+Config.BODY_YAW = math.pi
+
+-- Ball of balls.glb used in the match: classique, etoiles, jabu, brazu or euro
+Config.BALL_MODEL = "classique"
+
 Config.MATCH_MINUTES = 6 -- real minutes for the full 90'
 Config.TEAM_SIZE = 11
 Config.SNAPSHOT_HZ = 20

@@ -41,6 +41,53 @@ for _, f in { Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.
 	spot.Parent = gui
 end
 
+-- The web game's ball model (balls.glb, loaded by the server into ReplicatedStorage.FC27Assets) replaces the plain
+-- sphere when it is there: its parts are scaled to the ball, centred on it and welded, the sphere becomes invisible.
+task.spawn(function()
+	local assets = ReplicatedStorage:WaitForChild("FC27Assets", 15)
+	local balls = assets and assets:WaitForChild("Balls", 15)
+	if not balls then return end
+	local src = balls:FindFirstChild(Config.BALL_MODEL, true) or balls
+	local parts: { BasePart } = {}
+	if src:IsA("BasePart") then table.insert(parts, src) end
+	for _, d in src:GetDescendants() do
+		if d:IsA("BasePart") then table.insert(parts, d) end
+	end
+	if #parts == 0 then return end
+	local m = Instance.new("Model")
+	m.Name = "BallModel"
+	for _, p in parts do
+		local c = p:Clone()
+		c:ClearAllChildren()
+		for _, k in p:GetChildren() do
+			if k:IsA("SurfaceAppearance") then k:Clone().Parent = c end
+		end
+		c.Parent = m
+	end
+	local cf, size = m:GetBoundingBox()
+	m:ScaleTo(SIZE / math.max(size.X, size.Y, size.Z, 1e-3))
+	cf = m:GetBoundingBox()
+	m:PivotTo(m:GetPivot() + (ball.Position - cf.Position))
+	for _, p in m:GetChildren() do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CanTouch = false
+			p.Massless = true
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = ball
+			w.Part1 = p
+			w.Parent = p
+		end
+	end
+	for _, g in ball:GetChildren() do
+		if g:IsA("SurfaceGui") then g:Destroy() end
+	end
+	ball.Transparency = 1
+	m.Parent = ball
+end)
+
 local shadow = Instance.new("Part")
 shadow.Name = "FC27BallShadow"
 shadow.Shape = Enum.PartType.Cylinder

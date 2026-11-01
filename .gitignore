@@ -3,3 +3,6 @@
 *.rbxlx.lock
 sourcemap.json
 tools/
+
+node_modules/
+assets/build/

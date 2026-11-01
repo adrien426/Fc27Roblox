@@ -33,12 +33,29 @@ Le fichier est reconstruit automatiquement par GitHub à chaque envoi de code.
 | Saut (tête) | Espace | — | Saut |
 | Caméra TV | C | Select | 🎥 |
 
+## Modèles, animations et sons du jeu web
+
+Le jeu reprend les fichiers du jeu web : le footballeur Ch38 (`player.glb`), le stade (`stadium.glb`), les ballons (`balls.glb`), les 40 animations Mixamo et les sons. Roblox ne lit pas ces fichiers directement : les modèles et les sons doivent être **uploadés sur Roblox** (avec une clé Open Cloud), puis le jeu les charge par leur numéro (`src/shared/AssetIds.luau`). Tant qu'un fichier n'est pas uploadé (numéro 0), le jeu garde sa version construite en code.
+
+| Étape | Commande (dans `scripts/`, après `npm ci`) | Résultat |
+| --- | --- | --- |
+| Préparer les modèles | `node prepare-models.mjs` | `assets/build/*.glb` : sans compression Draco, chaque mesh sous 20 000 triangles (limite Roblox), poteaux du stade retirés |
+| Convertir les animations | `node build-anims.mjs` | `src/shared/Clips/*.luau` : un module par clip, joué sur les os du modèle par `src/shared/Skeleton.luau` |
+| Uploader | `node upload-assets.mjs` | modèles et sons sur Roblox, numéros dans `src/shared/AssetIds.luau` et `assets/uploaded.json` |
+| Publier une version | `node publish-place.mjs --release preview-<branche>` | le `Fc27.rbxlx` construit par GitHub publié dans une expérience Roblox |
+
+Variables pour l'upload et la publication : `ROBLOX_API_KEY` (clé Open Cloud : droits *assets* lecture/écriture et *universe-places* écriture), `ROBLOX_CREATOR_USER_ID` (ou `ROBLOX_CREATOR_GROUP_ID`), `ROBLOX_UNIVERSE_ID`, `ROBLOX_PLACE_ID`. Les modèles doivent appartenir au même compte (ou groupe) que l'expérience, sinon Roblox refuse de les charger dans le jeu.
+
+Sources : `assets/source/` (copie des fichiers du jeu web ; `anims/base.json` contient les clips intégrés à son `index.html`, extraits par `scripts/extract-web-clips.mjs`).
+
 ## Organisation du code (Rojo)
 
 ```
-src/shared/   Config (dimensions, équipes, formation), BallPhysics (physique du ballon)
-src/server/   Match (arbitre, ballon, joueurs ordinateur), Pitch (stade), Rig (corps et maillots)
-src/client/   Controls (commandes), BallView (affichage du ballon), Hud (score, messages, barres)
+src/shared/   Config (dimensions, équipes, formation), BallPhysics (physique du ballon),
+              Skeleton (lecture des clips), Clips (animations converties), AssetIds (numéros Roblox)
+src/server/   Match (arbitre, ballon, joueurs ordinateur), Pitch (stade), Rig (corps et maillots), Assets (modèles uploadés)
+src/client/   Controls (commandes), BallView (affichage du ballon), Hud (score, messages, barres),
+              Bodies (animations des joueurs), Sounds (sons)
 ```
 
 ## Travailler dans Roblox Studio avec Git
@@ -82,4 +99,25 @@ Ce que syncback récupère :
 
 ## Façon de travailler
 
-Les changements sont faits sur une branche de travail et publiés en **preview** (release `preview-<branche>`). Ils ne passent dans `main` qu'après validation.
+| Branche | Ce qui se passe à chaque envoi (push) |
+| --- | --- |
+| branche de travail (`claude/…`, …) | le jeu est vérifié et construit, puis publié en release **preview-<branche>** (à ouvrir dans Studio) |
+| `test` | déploiement automatique sur l'**expérience Roblox de test** (workflow *Deploy to Roblox*) |
+| `main` | déploiement automatique sur l'**expérience Roblox de production**, et release `latest` |
+
+1. Chaque changement est fait sur une branche de travail.
+2. Une fois terminé, la branche est **fusionnée dans `test`** (`git merge`, jamais d'écrasement) : le jeu de test se met à jour tout seul.
+3. Quand tout est bon en jeu, **`test` est fusionnée dans `main`** : la production se met à jour.
+
+Le déploiement uploade d'abord les modèles et sons qui ont changé, puis pousse leurs numéros (`AssetIds.luau`, `assets/uploaded.json`) sur la branche déployée, dans un commit de `github-actions[bot]`. C'est pour cela qu'on passe de `test` à `main` par une fusion de `test`, sinon les assets seraient recréés.
+
+Secrets du dépôt à créer une fois (Settings > Secrets and variables > Actions) :
+
+| Secret | Valeur |
+| --- | --- |
+| `ROBLOX_API_KEY` | clé Open Cloud : *assets* lecture/écriture, *universe-places* écriture sur les deux expériences |
+| `ROBLOX_CREATOR_USER_ID` | numéro du compte Roblox qui possède les deux expériences |
+| `ROBLOX_TEST_UNIVERSE_ID`, `ROBLOX_TEST_PLACE_ID` | l'expérience de test |
+| `ROBLOX_PROD_UNIVERSE_ID`, `ROBLOX_PROD_PLACE_ID` | l'expérience de production |
+
+Un déploiement peut aussi être relancé à la main : onglet **Actions > Deploy to Roblox > Run workflow** (choisir `test` ou `main`).

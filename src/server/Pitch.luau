@@ -1,5 +1,6 @@
--- Builds the stadium from code: striped pitch with all its markings, goals with nets, stands full of fans,
--- advertising boards, floodlights, team spawns and the lighting. Nothing has to be modelled in Studio.
+-- Builds the stadium: striped pitch with all its markings, goals with nets, team spawns and the lighting, from code.
+-- Around it, the web game's stadium model (stadium.glb) when it is loaded, placed like in the web version;
+-- otherwise stands full of fans, advertising boards and floodlights built from code.
 local Lighting = game:GetService("Lighting")
 local Teams = game:GetService("Teams")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
@@ -201,7 +202,40 @@ local function spawns(parent: Instance)
 	end
 end
 
-function Pitch.build()
+-- The web game's stadium: in its model the pitch is 137 units wide, scaled to 68 m (S = 68 / 137) and lowered by
+-- 3 units. Its outer walls span 551.9 units along the pitch; its lowest point (the railing) is 1.545 units up.
+local STADIUM_S = 68 / 137
+local STADIUM_LENGTH = 551.889
+local STADIUM_MIN_Y = 1.5455
+
+local function placeStadium(parent: Instance, tpl: Model)
+	local m = tpl:Clone()
+	-- Roblox may have imported it at another scale or turned a quarter: the long side goes along the pitch (x)
+	local size = m:GetExtentsSize()
+	if size.Z > size.X then
+		m:PivotTo(m:GetPivot() * CFrame.Angles(0, math.pi / 2, 0))
+		size = m:GetExtentsSize()
+	end
+	local want = STADIUM_LENGTH * STADIUM_S * M
+	m:ScaleTo(m:GetScale() * want / size.X)
+	local cf, sz = m:GetBoundingBox()
+	-- Its own grass 6 cm under ours, as in the web game, so the two never flicker
+	local bottom = Config.GROUND_Y + ((STADIUM_MIN_Y - 3) * STADIUM_S - 0.06) * M
+	local centre = toWorld(L / 2, W / 2, 0)
+	local target = Vector3.new(centre.X, bottom + sz.Y / 2, centre.Z)
+	m:PivotTo(m:GetPivot() + (target - cf.Position))
+	for _, d in m:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
+		end
+	end
+	m.Parent = parent
+end
+
+function Pitch.build(stadium: Model?)
 	local root = Instance.new("Folder")
 	root.Name = "Stadium"
 	root.Parent = workspace
@@ -223,15 +257,19 @@ function Pitch.build()
 	goal(root, 0)
 	goal(root, L)
 
-	local stands = Instance.new("Folder")
-	stands.Name = "Stands"
-	stands.Parent = root
-	stand(stands, toWorld(L / 2, -9, 0), (L + 20) * M, Vector3.new(0, 0, 1), 10)
-	stand(stands, toWorld(L / 2, W + 9, 0), (L + 20) * M, Vector3.new(0, 0, -1), 10)
-	stand(stands, toWorld(-9, W / 2, 0), (W + 6) * M, Vector3.new(1, 0, 0), 8)
-	stand(stands, toWorld(L + 9, W / 2, 0), (W + 6) * M, Vector3.new(-1, 0, 0), 8)
-	boards(root)
-	floodlights(root)
+	if stadium then
+		placeStadium(root, stadium)
+	else
+		local stands = Instance.new("Folder")
+		stands.Name = "Stands"
+		stands.Parent = root
+		stand(stands, toWorld(L / 2, -9, 0), (L + 20) * M, Vector3.new(0, 0, 1), 10)
+		stand(stands, toWorld(L / 2, W + 9, 0), (L + 20) * M, Vector3.new(0, 0, -1), 10)
+		stand(stands, toWorld(-9, W / 2, 0), (W + 6) * M, Vector3.new(1, 0, 0), 8)
+		stand(stands, toWorld(L + 9, W / 2, 0), (W + 6) * M, Vector3.new(-1, 0, 0), 8)
+		boards(root)
+		floodlights(root)
+	end
 	spawns(root)
 
 	Lighting.ClockTime = 16.5
