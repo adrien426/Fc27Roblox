@@ -51,6 +51,7 @@ local Message = remote("Message") :: RemoteEvent
 Net.Parent = ReplicatedStorage
 
 Pitch.build(Assets.stadium)
+Pitch.buildLobby()
 -- Characters only appear once the pitch is there (Players.CharacterAutoLoads is off in the place file): the
 -- server first loads the models, which takes a few seconds, and a character spawned before would fall
 Players.CharacterAutoLoads = true
@@ -106,7 +107,7 @@ type Actor = {
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
 	drib: any?, skillCD: number?, lastActive: number?, warned: boolean?,
-	yellow: number?, sentOff: boolean?, kicked: boolean?,
+	yellow: number?, sentOff: boolean?, kicked: boolean?, charConn: RBXScriptConnection?,
 }
 local actors: { Actor } = {}
 
@@ -207,11 +208,6 @@ local function actorOfPlayer(pl: Player): Actor?
 	return nil
 end
 
-local function humansIn(t: number): number
-	local n = 0
-	for _, a in actors do if a.team == t and a.player then n += 1 end end
-	return n
-end
 
 -- ---------- Ball ----------
 local ball: BallPhysics.Ball = { x = L / 2, y = W / 2, z = 0, vx = 0, vy = 0, vz = 0, spin = 0, tspin = 0 }
@@ -858,7 +854,7 @@ local function publishLineups()
 	local teams = { {}, {} }
 	for _, a in actors do
 		if not a.sentOff then
-			table.insert(teams[a.team], { num = a.num, name = a.name, role = a.role, human = a.player ~= nil })
+			table.insert(teams[a.team], { num = a.num, name = a.name, role = a.role, human = a.player ~= nil, slot = a.slot })
 		end
 	end
 	for t = 1, 2 do table.sort(teams[t], function(p, q) return p.num < q.num end) end
@@ -1220,60 +1216,97 @@ local function botThink(a: Actor, dt: number)
 end
 
 -- ---------- Humans ----------
-local function assignPlayer(pl: Player)
-	local t = if humansIn(1) <= humansIn(2) then 1 else 2
-	if humansIn(t) >= Config.TEAM_SIZE - 1 then t = 3 - t end
-	if humansIn(t) >= Config.TEAM_SIZE - 1 then return end -- both sides full: spectator
-	-- Take over a computer player of that team (forwards first, never the keeper)
-	local pick = nil
-	for i = #actors, 1, -1 do
-		local a = actors[i]
-		if a.team == t and not a.player and a.role ~= "GK" then pick = a; break end
+-- A player in the locker room takes a place: team t, formation slot (client/Lobby). The computer player there steps
+-- aside; the human is dressed in the team's kit and sent onto the pitch at that place.
+local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
+	if actorOfPlayer(pl) then return false, "Tu es déjà sur le terrain" end
+	local pick: Actor? = nil
+	for _, a in actors do
+		if a.team == t and a.slot == slot then pick = a end
 	end
-	if not pick then return end
-	if pick.model then pick.model:Destroy() end
-	pick.model, pick.hum, pick.root = nil, nil, nil
-	pick.player = pl
-	pick.name = pl.DisplayName
+	if not pick then return false, "Cette place n’existe pas" end
+	local p = pick :: Actor
+	if p.player then return false, "Place déjà prise" end
+	if p.role == "GK" then return false, "Le gardien reste un robot pour l’instant" end
+	if owner == p then owner = nil end
+	if setTaker == p and phase == "set" then phase = "play" end
+	if p.model then p.model:Destroy() end
+	p.model, p.hum, p.root = nil, nil, nil
+	p.drib = nil
+	p.player = pl
+	p.name = pl.DisplayName
+	p.lastActive = os.clock()
+	p.warned = false
 	pl.Team = Teams:FindFirstChild(Config.TEAMS[t].name) :: Team
 	pl.Neutral = false
+	pl:SetAttribute("InMatch", true)
 	local function onChar(char: Model)
 		task.wait(0.3)
-		if pick.player ~= pl then return end
-		attach(pick, char)
-		Rig.dress(char, t, pick.num)
-		Rig.addBody(char, t, pick.num, rng)
+		if p.player ~= pl then return end
+		attach(p, char)
+		Rig.dress(char, t, p.num)
+		Rig.addBody(char, t, p.num, rng)
 		char:SetAttribute("Team", t)
-		char:SetAttribute("Role", pick.role)
-		local hum = pick.hum
+		char:SetAttribute("Role", p.role)
+		local hum = p.hum
 		if hum then hum.WalkSpeed = Config.WALK end
-		local hx, hy = homeOf(pick)
-		place(pick, hx, hy)
+		local hx, hy = homeOf(p)
+		place(p, hx, hy)
 	end
-	pl.CharacterAdded:Connect(onChar)
+	p.charConn = pl.CharacterAdded:Connect(onChar)
 	if pl.Character then task.spawn(onChar, pl.Character) end
 	publishLineups()
+	comment(`{pl.DisplayName} entre sur le terrain avec les {Config.TEAMS[t].name} !`, 0.3, true)
 	if phase == "waiting" then
 		task.delay(2, function() if phase == "waiting" then kickoff(1) end end)
 	end
+	return true, "ok"
 end
 
-Players.PlayerAdded:Connect(assignPlayer)
-for _, pl in Players:GetPlayers() do task.spawn(assignPlayer, pl) end
+-- Back to the locker room: a computer player takes the place again
+local function leaveMatch(pl: Player)
+	local a = actorOfPlayer(pl)
+	if not a then return end
+	if a.charConn then a.charConn:Disconnect(); a.charConn = nil end
+	if owner == a then owner = nil end
+	a.player = nil
+	a.drib = nil
+	a.name = Config.NAMES[rng:NextInteger(1, #Config.NAMES)]
+	pl:SetAttribute("InMatch", false)
+	;(pl :: any).Team = nil
+	pl.Neutral = true
+	spawnBot(a)
+	publishLineups()
+	local anyone = false
+	for _, b in actors do if b.player then anyone = true end end
+	if not anyone then phase = "waiting"; publish() end
+end
+
+-- Players arrive in the locker room (Pitch.buildLobby) and pick their place there
+local Join = Instance.new("RemoteFunction")
+Join.Name = "Join"
+Join.OnServerInvoke = function(pl: Player, t: any, slot: any): (boolean, string)
+	if type(t) ~= "number" or type(slot) ~= "number" or (t ~= 1 and t ~= 2) then return false, "Choix invalide" end
+	return joinMatch(pl, t, slot)
+end
+Join.Parent = Net
+local Leave = Instance.new("RemoteEvent")
+Leave.Name = "Leave"
+Leave.OnServerEvent:Connect(function(pl: Player)
+	if not actorOfPlayer(pl) then return end
+	leaveMatch(pl)
+	pl:LoadCharacter() -- back in the locker room
+end)
+Leave.Parent = Net
+Players.PlayerAdded:Connect(function(pl) pl:SetAttribute("InMatch", false) end)
+for _, pl in Players:GetPlayers() do pl:SetAttribute("InMatch", false) end
 -- Those who arrived while the pitch was being built get their character now
 for _, pl in Players:GetPlayers() do
 	if not pl.Character then task.spawn(function() pl:LoadCharacter() end) end
 end
 
 Players.PlayerRemoving:Connect(function(pl)
-	local a = actorOfPlayer(pl)
-	if not a then return end
-	if owner == a then owner = nil end
-	a.player = nil
-	a.name = Config.NAMES[rng:NextInteger(1, #Config.NAMES)]
-	spawnBot(a)
-	publishLineups()
-	if #Players:GetPlayers() <= 1 then phase = "waiting"; publish() end
+	leaveMatch(pl)
 end)
 
 Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, power: any)
