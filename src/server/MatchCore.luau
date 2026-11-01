@@ -1248,6 +1248,27 @@ local function botThink(a: Actor, dt: number)
 end
 
 -- ---------- Humans ----------
+-- What he bought and chose in the shop, put on his character for Rig.addBody: boots colour, special shirt, VIP
+local function dressFromShop(pl: Player, char: Model)
+	local eq = Economy.equipOf(pl)
+	local boots = Economy.owns(pl, "style") and Shop.choice("boots", eq.boots)
+	local kit = Economy.owns(pl, "style") and Shop.choice("kit", eq.kit)
+	char:SetAttribute("BootsColor", if boots then boots.color else nil)
+	char:SetAttribute("KitTint", if kit then kit.color else nil)
+	char:SetAttribute("VIP", Economy.owns(pl, "vip"))
+end
+
+-- A choice made in the shop during the match shows at once: the body is dressed again
+Players.PlayerAdded:Connect(function(pl)
+	pl:GetAttributeChangedSignal("Equip"):Connect(function()
+		local a = actorOfPlayer(pl)
+		local char = a and a.model
+		if not a or not char then return end
+		dressFromShop(pl, char)
+		Rig.addBody(char, a.team, a.num, rng)
+	end)
+end)
+
 -- A player in the locker room takes a place: team t, formation slot (client/Lobby). The computer player there steps
 -- aside; the human is dressed in the team's kit and sent onto the pitch at that place.
 local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
@@ -1276,13 +1297,7 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 		task.wait(0.3)
 		if p.player ~= pl then return end
 		attach(p, char)
-		-- What he bought and chose in the shop: boots colour, special shirt
-		local eq = Economy.equipOf(pl)
-		local boots = Economy.owns(pl, "style") and Shop.choice("boots", eq.boots)
-		local kit = Economy.owns(pl, "style") and Shop.choice("kit", eq.kit)
-		char:SetAttribute("BootsColor", if boots then boots.color else nil)
-		char:SetAttribute("KitTint", if kit then kit.color else nil)
-		char:SetAttribute("VIP", Economy.owns(pl, "vip"))
+		dressFromShop(pl, char)
 		Rig.dress(char, t, p.num)
 		Rig.addBody(char, t, p.num, rng)
 		char:SetAttribute("Team", t)

@@ -195,12 +195,52 @@ if UserInputService.TouchEnabled then
 		local b = gui:FindFirstChild("tackle")
 		if b and b:IsA("TextButton") then b.Text = if haveBall then "Dribble" else "Tacle" end
 	end)
-	button("shoot", "Tir", 92, UDim2.new(1, -150, 1, -175), Color3.fromRGB(242, 194, 48), dark)
-	button("pass", "Passe", 76, UDim2.new(1, -250, 1, -110), Color3.fromRGB(244, 247, 240), dark)
-	button("lob", "Lob", 64, UDim2.new(1, -262, 1, -205), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
-	button("tackle", "Tacle", 64, UDim2.new(1, -165, 1, -275), Color3.fromRGB(255, 107, 87), Color3.new(1, 1, 1))
-	button("sprint", "Sprint", 58, UDim2.new(1, -60, 1, -260), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
+	button("shoot", "Tir", 70, UDim2.new(), Color3.fromRGB(242, 194, 48), dark)
+	button("pass", "Passe", 70, UDim2.new(), Color3.fromRGB(244, 247, 240), dark)
+	button("lob", "Lob", 70, UDim2.new(), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
+	button("sprint", "Sprint", 70, UDim2.new(), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
+	button("tackle", "Tacle", 70, UDim2.new(), Color3.fromRGB(255, 107, 87), Color3.new(1, 1, 1))
 	button("camera", "🎥", 44, UDim2.new(0.5, 0, 0, 30), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
+
+	-- Two columns above Roblox's jump button, each button the jump button's size, a little apart:
+	--   Sprint  Tacle/Dribble
+	--   Passe   Lob
+	--   Tir     (jump)
+	-- The jump button is read from Roblox's own touch controls (its size changes with the screen)
+	local GRID = { shoot = { 0, 0 }, pass = { 0, 1 }, lob = { 1, 1 }, sprint = { 0, 2 }, tackle = { 1, 2 } }
+	local function layout()
+		local size, right, bottom = 70, 0, 0
+		local touchGui = player.PlayerGui:FindFirstChild("TouchGui")
+		local jump = touchGui and touchGui:FindFirstChild("JumpButton", true)
+		local origin = gui.AbsolutePosition
+		if jump and jump:IsA("GuiObject") and jump.AbsoluteSize.X > 0 then
+			size = jump.AbsoluteSize.X
+			right = jump.AbsolutePosition.X - origin.X -- left edge of the jump button
+			bottom = jump.AbsolutePosition.Y - origin.Y -- top edge of the jump button
+		else
+			local cam = workspace.CurrentCamera
+			local vs = if cam then cam.ViewportSize else Vector2.new(800, 400)
+			right = vs.X - 95 - origin.X
+			bottom = vs.Y - 90 - origin.Y
+		end
+		local gap = math.max(8, size * 0.15)
+		for kind, cell in GRID do
+			local b = gui:FindFirstChild(kind)
+			if not b or not b:IsA("TextButton") then continue end
+			b.Size = UDim2.fromOffset(size, size)
+			b.TextSize = math.floor(size / 4.6)
+			-- Column 1 sits right above the jump button, column 0 to its left; row 0 is the jump button's row
+			local x = right + size / 2 + (cell[1] - 1) * (size + gap)
+			local y = bottom + size / 2 - cell[2] * (size + gap)
+			b.Position = UDim2.fromOffset(x, y)
+		end
+	end
+	task.spawn(function()
+		while true do
+			layout()
+			task.wait(1)
+		end
+	end)
 end
 
 RunService.RenderStepped:Connect(function(dt)

@@ -189,7 +189,7 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	-- team colour without hiding it, shop boots (BootsColor) replace the random ones
 	local kit = if num == 1 then team.gk else team.color
 	local tintAttr = model:GetAttribute("KitTint")
-	if typeof(tintAttr) == "Color3" and num ~= 1 then kit = kit:Lerp(tintAttr, 0.35) end
+	if typeof(tintAttr) == "Color3" and num ~= 1 then kit = kit:Lerp(tintAttr, 0.55) end
 	local bootsAttr = model:GetAttribute("BootsColor")
 	local body = tpl:Clone()
 	body.Name = "Body"
