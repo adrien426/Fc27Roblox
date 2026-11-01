@@ -1,7 +1,7 @@
 --!strict
 -- The shop (walk up to the BOUTIQUE counter in the locker room, or the 🛒 button there): each item with its price in
 -- Robux and in coins; once bought, its choices (celebration, boots, special shirt, shot trail) to equip. Coin packs
--- at the bottom. On the test experience every purchase is simulated (free), as a banner says. Also: your coins in
+-- at the bottom. The game's creators get everything free (server/Economy), as a banner says. Also: your coins in
 -- the corner of the screen, and a "+50 But" when you earn some.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -176,7 +176,7 @@ end
 
 render = function()
 	for _, c in list:GetChildren() do if c:IsA("Frame") then c:Destroy() end end
-	banner.Text = if player:GetAttribute("ShopTest") == true then "MODE TEST : achats simulés, gratuits" else ""
+	banner.Text = if player:GetAttribute("ShopFree") == true then "CRÉATEUR : tout est offert" else ""
 	local owned = decode("Owned")
 	local equip = decode("Equip")
 	local have = (player:GetAttribute("Coins") :: number?) or 0

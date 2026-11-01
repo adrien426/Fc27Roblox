@@ -1,5 +1,5 @@
 // Creates the shop's game passes and coin packs (developer products) on Roblox with Open Cloud, if they do not exist
-// yet, and writes their ids into src/shared/ShopIds.luau (read by server/Economy for real purchases on main).
+// yet, and writes their ids into src/shared/ShopIds.luau (read by server/Economy for real purchases).
 // Names, descriptions and prices come from src/shared/Shop.luau's values below (keep them in step).
 //
 // Environment: ROBLOX_API_KEY (permissions game-pass read/write and developer-product read/write on the experience),
@@ -77,8 +77,8 @@ try {
 
 const n = (o, k) => o[k] || 0;
 writeFileSync(IDS, `-- Roblox ids of the shop's game passes and Robux coin packs (developer products), written by
--- scripts/create-shop.mjs when the main branch is deployed. 0 = not created yet: buying with Robux is not offered
--- for it in the real game (coins still work; on the test branch every purchase is simulated anyway).
+-- scripts/create-shop.mjs at each deploy. 0 = not created yet: buying it with Robux is not offered (coins still work;
+-- the game's creators get everything free anyway).
 return {
 \tpasses = { celebrations = ${n(ids.passes, 'celebrations')}, style = ${n(ids.passes, 'style')}, vip = ${n(ids.passes, 'vip')}, trail = ${n(ids.passes, 'trail')} },
 \tproducts = { coins500 = ${n(ids.products, 'coins500')}, coins1500 = ${n(ids.products, 'coins1500')}, coins5000 = ${n(ids.products, 'coins5000')} },
