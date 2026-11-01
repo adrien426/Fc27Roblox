@@ -1,7 +1,7 @@
 {
   "player": {
     "id": 73631537493084,
-    "sha256": "46eb9ede1940dbdcb57b1cdd0c4daa9d0e8d4a9498250ae5e35d5cd030a6cd6a",
+    "sha256": "939ca6ab8b69dd20510b08e0431eab26bffeb9e03ac24c25d03ed23bc931db3f",
     "file": "assets/build/player.glb",
     "type": "Model"
   },
