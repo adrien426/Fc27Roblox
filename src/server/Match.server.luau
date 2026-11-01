@@ -88,7 +88,7 @@ type Actor = {
 	team: number, slot: number, role: string, num: number, name: string,
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
-	drib: any?, skillCD: number?, auto: boolean?,
+	drib: any?, skillCD: number?, lastActive: number?, warned: boolean?,
 }
 local actors: { Actor } = {}
 
@@ -639,7 +639,8 @@ local function doSkill(a: Actor, ix: number?, iy: number?)
 	end
 	local stamina = if a.player then (a.player:GetAttribute("Stamina") :: number?) else nil
 	local c = Dribbles.chance(m, if od < 10 then od else nil, stamina)
-	if not a.player then c = math.clamp(c + 0.05, 0, 1) end
+	-- Like the web game, the human's moves are much more likely to work than the computer's
+	if a.player then c = math.max(c + 0.3, 0.88) end
 	local vx, vy = velOf(a)
 	local d = {
 		m = m, t0 = t, fx = fx, fy = fy, sx = sx, sy = sy, c = c, q = Dribbles.quality(c, rng:NextNumber()),
@@ -794,7 +795,7 @@ local function tryControl()
 	local db = dribbler
 	if db and now() < dribblerT and db.cool <= 0 and db.stun <= 0 and ball.z < 1.6 and db.root then
 		local x, y = posOf(db)
-		if dist2(x, y, ball.x, ball.y) < 1.8 then
+		if dist2(x, y, ball.x, ball.y) < (if db.player then 2.6 else 1.8) then
 			dribbler = nil
 			giveBall(db)
 			return
@@ -852,14 +853,7 @@ local function moveBot(a: Actor, x: number, y: number, speed: number)
 	local hum = a.hum
 	if not hum or not a.root then return end
 	local p = toWorld(math.clamp(x, -2, L + 2), math.clamp(y, -2, W + 2), 0)
-	if a.player then
-		-- Assisted play: his own machine moves him (client/Controls)
-		if a.model then
-			a.model:SetAttribute("AutoTo", p)
-			a.model:SetAttribute("AutoSpeed", speed)
-		end
-		return
-	end
+	if a.player then return end -- a human moves himself
 	hum.WalkSpeed = speed
 	if not a.lastTarget or (a.lastTarget - p).Magnitude > 1.5 or a.moveT <= 0 then
 		hum:MoveTo(p)
@@ -994,7 +988,7 @@ local function botThink(a: Actor, dt: number)
 		local px, py = ball.x + ball.vx * 0.35, ball.y + ball.vy * 0.35
 		moveBot(a, px, py, 21)
 		-- Tackle when close to an opponent with the ball
-		if owner and (owner :: Actor).team ~= t and a.cool <= 0 and not held then
+		if owner and (owner :: Actor).team ~= t and a.cool <= 0 and not held and not (owner :: Actor).drib then
 			local ox, oy = posOf(owner :: Actor)
 			if dist2(x, y, ox, oy) < 1.5 and rng:NextNumber() < 1.2 * dt then
 				local succ = if (owner :: Actor).player then 0.42 else 0.5
@@ -1080,12 +1074,10 @@ end)
 Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, power: any)
 	local a = actorOfPlayer(pl)
 	if not a or type(kind) ~= "string" then return end
-	if kind == "auto" then
-		-- Assisted play (no input for a moment): the computer plays for him until he touches the controls again
-		a.auto = dx == 1
-		if not a.auto and a.model then a.model:SetAttribute("AutoTo", nil) end
-		return
-	end
+	-- Any input keeps him in the match ("active" is sent by his machine while he moves)
+	a.lastActive = os.clock()
+	a.warned = false
+	if kind == "active" then return end
 	if phase ~= "play" and phase ~= "set" then return end
 	if a.stun > 0 then return end
 	dx = if type(dx) == "number" and dx == dx then dx else 0
@@ -1133,6 +1125,25 @@ local function separate()
 	end
 end
 
+-- A player who does not touch the controls for Config.IDLE_KICK seconds leaves the match: a computer player takes
+-- his place (PlayerRemoving). He is warned 20 seconds before.
+local function checkIdle()
+	local t = os.clock()
+	for _, a in actors do
+		local pl = a.player
+		if not pl then continue end
+		if not a.lastActive then a.lastActive = t end
+		local idle = t - (a.lastActive :: number)
+		if idle > Config.IDLE_KICK then
+			pl:Kick("Inactif trop longtemps : un joueur de l'ordinateur a pris ta place. Reviens quand tu veux !")
+		elseif idle > Config.IDLE_KICK - 20 and not a.warned then
+			a.warned = true
+			Message:FireClient(pl, "Tu es inactif", "Bouge ou tu seras remplacé dans 20 s", 3)
+		end
+	end
+end
+local idleT = 0
+
 -- ---------- Main loop ----------
 local sendT, aiT = 0, 0
 local AI_DT = 0.1
@@ -1145,6 +1156,8 @@ RunService.Heartbeat:Connect(function(dt)
 		a.stun = math.max(0, a.stun - dt)
 	end
 	separate()
+	idleT += dt
+	if idleT >= 1 then idleT = 0; checkIdle() end
 	for _, a in actors do
 		if a.drib then dribbleStep(a) end
 	end
@@ -1227,14 +1240,14 @@ RunService.Heartbeat:Connect(function(dt)
 	aiT += dt
 	if aiT >= AI_DT then
 		for _, a in actors do
-			if a.player and not a.auto then continue end
+			if a.player then continue end
 			if phase == "play" or phase == "set" then
 				botThink(a, aiT)
 			elseif a.hum and a.root then
 				local hx, hy = homeOf(a)
 				moveBot(a, hx, hy, Config.WALK)
 			end
-			if a.model and a.root and not a.player then
+			if a.model and a.root then
 				local v = a.root.AssemblyLinearVelocity
 				Rig.animate(a.model, Vector3.new(v.X, 0, v.Z).Magnitude)
 			end
