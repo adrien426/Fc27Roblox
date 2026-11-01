@@ -65,6 +65,21 @@ local function load(name: string, id: number, parent: Instance): Model?
 end
 
 Assets.player = load("Player", AssetIds.player, serverFolder)
+-- What the footballer was imported as (console, F9 > Server): the animations need its bones
+if Assets.player then
+	local parts, bones, skinned, names = 0, 0, 0, {}
+	for _, d in Assets.player:GetDescendants() do
+		if d:IsA("BasePart") then
+			parts += 1
+			local ok, sk = pcall(function() return (d :: any).HasSkinnedMesh end)
+			if ok and sk then skinned += 1 end
+		elseif d:IsA("Bone") then
+			bones += 1
+			if #names < 4 then table.insert(names, d.Name) end
+		end
+	end
+	print(`[FC27] Player model: {parts} parts ({skinned} skinned), {bones} bones ({table.concat(names, ", ")})`)
+end
 Assets.stadium = load("Stadium", AssetIds.stadium, serverFolder)
 Assets.balls = load("Balls", AssetIds.balls, sharedFolder)
 

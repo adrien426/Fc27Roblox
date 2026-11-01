@@ -102,14 +102,49 @@ local function makePlate(st: Body)
 	st.plate = p
 end
 
-local function add(inst: Instance)
+-- Reported once in the console (F9) when the footballer cannot be animated, to know why
+local reported = false
+local function report(msg: string)
+	if reported then return end
+	reported = true
+	warn("[FC27] " .. msg)
+end
+
+local function add(inst: Instance, tries: number?)
 	if not inst:IsA("Model") then return end
 	local body = inst :: Model
 	local parent = body.Parent
 	if not parent or not parent:IsA("Model") then return end
+	if not CollectionService:HasTag(body, "FC27Body") then return end
 	local model = parent :: Model
+	local cur = bodies[model]
+	if cur and cur.body == body then return end
 	local rig = Skeleton.bind(body)
-	if not rig then return end
+	if not rig then
+		-- Its bones may still be arriving from the server: try again for a few seconds
+		local n = (tries or 0) + 1
+		if n < 20 then
+			task.delay(0.5, add, body, n)
+		else
+			local parts = 0
+			for _, d in body:GetDescendants() do
+				if d:IsA("BasePart") then parts += 1 end
+			end
+			report(`The footballer model has no bones ({parts} parts): it was imported without its skeleton, so it cannot be animated`)
+		end
+		return
+	end
+	if not reported then
+		local walk = Skeleton.clip("walk")
+		local matched, names = 0, {}
+		for k in (rig :: Skeleton.Rig).bones do
+			if walk and walk.bones[k] then matched += 1 end
+			if #names < 6 then table.insert(names, k) end
+		end
+		if matched == 0 then
+			report(`The footballer's bones do not match the clips (bones: {table.concat(names, ", ")}): no animation`)
+		end
+	end
 	local r = model:FindFirstChild("HumanoidRootPart")
 	local root: BasePart? = if r and r:IsA("BasePart") then r :: BasePart else nil
 	local st: Body = {
