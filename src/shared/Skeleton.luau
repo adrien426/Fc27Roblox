@@ -92,10 +92,11 @@ function Skeleton.clip(name: string): Clip?
 end
 
 -- ---------- Rig ----------
--- "mixamorig5:LeftArm" -> "LeftArm"
+-- "mixamorig5:LeftArm" -> "LeftArm" (also when the importer turned the ":" into "_" or ".")
 local function boneKey(name: string): string
-	return (string.gsub(name, "^mixamorig%d*:?", ""))
+	return (string.gsub(name, "^mixamorig%d*[:_%.]?", ""))
 end
+Skeleton.boneKey = boneKey
 
 -- Finds the bones of a body and remembers their rest pose (call before animating it)
 function Skeleton.bind(body: Instance): Rig?
