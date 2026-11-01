@@ -11,6 +11,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Skeleton = require(Shared:WaitForChild("Skeleton"))
+local Dribbles = require(Shared:WaitForChild("Dribbles"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 local BallState = Net:WaitForChild("BallState") :: any
 
@@ -258,6 +259,84 @@ local function choose(st: Body, now: number, dt: number): (string, number)
 	return loop(st, "run", dt, math.clamp(speed / RUN_PACE, 0.6, 1.6))
 end
 
+-- ---------- Skill moves: the move's own animation on top of the running clip ----------
+-- Like the web game's applyDribbleBones: bones are turned in world space about the player's forward and right
+-- axes (spin and hop move the whole body), fading in and out over the first and last 8 % of the move.
+local function worldOf(i: Instance): CFrame
+	if i:IsA("Bone") then
+		local p = i.Parent
+		return (if p then worldOf(p) else CFrame.identity) * i.CFrame * i.Transform
+	elseif i:IsA("BasePart") then
+		return i.CFrame
+	end
+	return CFrame.identity
+end
+
+-- Turns a bone in world space about its own joint (rot) and/or moves it (lift), by changing its Transform
+local function turnBone(bn: Bone?, rot: CFrame?, lift: Vector3?)
+	if not bn then return end
+	local b = bn :: Bone
+	local p = b.Parent
+	local base = (if p then worldOf(p) else CFrame.identity) * b.CFrame
+	local w = base * b.Transform
+	local r = if rot then rot * w.Rotation else w.Rotation
+	b.Transform = base:Inverse() * (CFrame.new(w.Position + (lift or Vector3.zero)) * r)
+end
+
+local function bone(st: Body, key: string): Bone?
+	local l = st.rig.bones[key]
+	return l and l[1]
+end
+
+local function applyDribble(st: Body, now: number)
+	local m = st.model
+	local key = m:GetAttribute("Drib")
+	local mv = if type(key) == "string" then Dribbles.byKey[key] else nil
+	local at = m:GetAttribute("DribAt")
+	local F = m:GetAttribute("DribF")
+	local S = m:GetAttribute("DribS")
+	if not mv or type(at) ~= "number" or typeof(F) ~= "Vector3" or typeof(S) ~= "Vector3" then return end
+	local move = mv :: Dribbles.Move
+	local k = (now - (at :: number)) / move.dur
+	if k < 0 or k >= 1 then return end
+	local o = Dribbles.pose(move, k)
+	local w = math.clamp(math.min(k, 1 - k) / 0.08, 0, 1)
+	local sd = if (S :: Vector3):Dot((F :: Vector3):Cross(Vector3.yAxis)) >= 0 then 1 else -1
+	local spin = CFrame.Angles(0, o.spin * sd, 0)
+	turnBone(bone(st, "Hips"), spin, Vector3.new(0, (math.max(0, o.hop) - o.crouch * 0.6 * w) * M, 0))
+	local Fa = spin:VectorToWorldSpace(F :: Vector3)
+	local Ra = Fa:Cross(Vector3.yAxis)
+	local function about(axis: Vector3, a: number): CFrame? return if a ~= 0 then CFrame.fromAxisAngle(axis, a) else nil end
+	-- Turning about the right axis by +a swings a limb forward (and tips the trunk backwards)
+	turnBone(bone(st, "Spine"), about(Ra, -o.bend * 0.8 * w))
+	turnBone(bone(st, "Spine"), about(Fa, o.lean * sd * 0.8 * w))
+	local leadR = sd > 0
+	for _, l in o.legs do
+		local which, side, fwd, knee = l[1], l[2], l[3], l[4]
+		local right = if which == "L" then leadR else not leadR
+		local s = if right then 1 else -1
+		local nm = if right then "Right" else "Left"
+		turnBone(bone(st, nm .. "UpLeg"), about(Ra, fwd * 0.9 * w))
+		turnBone(bone(st, nm .. "UpLeg"), about(Fa, -s * side * 0.8 * w))
+		turnBone(bone(st, nm .. "Leg"), about(Ra, -math.max(0, knee) * 0.9 * w))
+	end
+	if o.crouch ~= 0 then
+		for _, nm in { "Right", "Left" } do
+			turnBone(bone(st, nm .. "UpLeg"), about(Ra, o.crouch * 2.2 * w))
+			turnBone(bone(st, nm .. "Leg"), about(Ra, -o.crouch * 4 * w))
+		end
+	end
+	local arms = o.arms
+	if arms then
+		for i, nm in { "Right", "Left" } do
+			local b = bone(st, nm .. "Arm")
+			local s = if i == 1 then 1 else -1
+			turnBone(b, about(Fa, -s * arms[1] * 0.45 * w))
+			turnBone(b, about(Ra, arms[2] * 0.5 * w))
+		end
+	end
+end
+
 local function update(st: Body, now: number, dt: number)
 	local name, t = choose(st, now, dt)
 	local clip = Skeleton.clip(name) or Skeleton.clip("idle")
@@ -274,6 +353,7 @@ local function update(st: Body, now: number, dt: number)
 	end
 	Skeleton.apply(st.rig, pose)
 	st.last = pose
+	applyDribble(st, now)
 end
 
 RunService.RenderStepped:Connect(function(dt)
