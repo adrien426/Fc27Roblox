@@ -43,12 +43,15 @@ for _, f in { Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.
 end
 
 -- The web game's ball model (balls.glb, loaded by the server into ReplicatedStorage.FC27Assets) replaces the plain
--- sphere when it is there: its parts are scaled to the ball, centred on it and welded, the sphere becomes invisible.
-task.spawn(function()
-	local assets = ReplicatedStorage:WaitForChild("FC27Assets", 15)
-	local balls = assets and assets:WaitForChild("Balls", 15)
-	if not balls then return end
-	local src = balls:FindFirstChild(Config.BALL_MODEL, true) or balls
+-- sphere when it is there: the match ball (Net attribute MatchBall, drawn by the server; shown in client/Intro) is
+-- scaled to the ball, centred on it and welded, the sphere becomes invisible. It changes with each new match.
+local balls: Instance? = nil
+local function useBall(key: string?)
+	local b = balls
+	if not b then return end
+	local old = ball:FindFirstChild("BallModel")
+	if old then old:Destroy() end
+	local src = b:FindFirstChild(key or Config.BALL_MODEL, true) or b:FindFirstChild(Config.BALL_MODEL, true) or b
 	local parts: { BasePart } = {}
 	if src:IsA("BasePart") then table.insert(parts, src) end
 	for _, d in src:GetDescendants() do
@@ -65,6 +68,8 @@ task.spawn(function()
 		end
 		c.Parent = m
 	end
+	local spinNow = ball.CFrame.Rotation
+	ball.CFrame = CFrame.new(ball.Position)
 	local cf, size = m:GetBoundingBox()
 	m:ScaleTo(SIZE / math.max(size.X, size.Y, size.Z, 1e-3))
 	cf = m:GetBoundingBox()
@@ -87,6 +92,13 @@ task.spawn(function()
 	end
 	ball.Transparency = 1
 	m.Parent = ball
+	ball.CFrame = CFrame.new(ball.Position) * spinNow
+end
+task.spawn(function()
+	local assets = ReplicatedStorage:WaitForChild("FC27Assets", 15)
+	balls = assets and assets:WaitForChild("Balls", 15)
+	useBall(Net:GetAttribute("MatchBall") :: string?)
+	Net:GetAttributeChangedSignal("MatchBall"):Connect(function() useBall(Net:GetAttribute("MatchBall") :: string?) end)
 end)
 
 local shadow = Instance.new("Part")

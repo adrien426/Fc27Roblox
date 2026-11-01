@@ -80,6 +80,19 @@ local function publish()
 	Net:SetAttribute("Dir1", dir[1])
 end
 
+-- A line of commentary at the bottom of the screen (client/Hud), and the crowd getting louder for a moment
+-- (client/Sounds): swell 0..1
+-- speak: the commentator also says it out loud (client/Sounds, text-to-speech in each player's language)
+local function comment(text: string, swell: number?, speak: boolean?)
+	Net:SetAttribute("CommentSpeak", speak == true)
+	Net:SetAttribute("Comment", text)
+	Net:SetAttribute("CommentAt", workspace:GetServerTimeNow())
+	if swell and swell > 0 then
+		Net:SetAttribute("Crowd", swell)
+		Net:SetAttribute("CrowdAt", workspace:GetServerTimeNow())
+	end
+end
+
 local function say(text: string, sub: string?, dur: number?)
 	Message:FireAllClients(text, sub or "", dur or 2)
 end
@@ -294,6 +307,7 @@ end
 
 -- Ground pass into the receiver's run, weighted so it reaches him at a comfortable speed
 local function passTo(a: Actor, m: Actor)
+	if m.player then comment(`{a.name} cherche {m.name}`, nil, true) elseif rng:NextNumber() < 0.3 then comment(`Passe de {a.name} pour {m.name}`) end
 	local px, py = posOf(a)
 	local mx, my = posOf(m)
 	local mvx, mvy = velOf(m)
@@ -388,6 +402,7 @@ local function doShoot(a: Actor, dx: number, dy: number, power: number)
 	kickBall(a, math.cos(ang) * vh, math.sin(ang) * vh, vz)
 	shotBy = a.team
 	say("Tir !", a.name, 0.8)
+	comment(`Frappe de {a.name} !`, 0.3, a.player ~= nil)
 end
 
 -- Lob: the longer it was held, the further and higher. A team-mate running into the landing spot gets it
@@ -495,6 +510,7 @@ local function doTackle(a: Actor)
 		lastTouch = a
 		a.cool = 0.1
 		say("Tacle réussi !", a.name, 0.9)
+		comment(`Tacle de {a.name}, il récupère le ballon.`, 0.2)
 		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 	else
 		label(a, "Tacle raté", Color3.fromRGB(255, 120, 100), 1)
@@ -657,6 +673,7 @@ local function dribbleOutcome(a: Actor)
 		end
 	end
 	if q == 3 and a.player then say(`{m.name} parfait !`, a.name, 1.4) end
+	if q == 3 then comment(`{m.name} parfait de {a.name} !`, 0.4, true) elseif q == 2 and rng:NextNumber() < 0.5 then comment(`Joli geste de {a.name} : {string.lower(m.name)}.`, 0.15) end
 end
 
 -- Starts a skill move for the player who has the ball. (ix, iy): where his stick points, to choose the side
@@ -773,6 +790,13 @@ local function setPiece(kind: string, t: number, x: number, y: number, taker: Ac
 	phase, phaseT, setTaker, setKindNow = "set", 0, tk, kind
 	Net:SetAttribute("SetKind", kind)
 	publish()
+	local names = { corner = "Corner", freekick = "Coup franc", penalty = "Penalty", throw = "Touche", goalkick = "Six mètres", kickoff = "Coup d’envoi" }
+	if tk.player then
+		-- Everybody waits for him (20 s at most)
+		local how = if kind == "penalty" then "Vise avec le joystick, puis Tir" elseif kind == "throw" then "Passe pour remettre en jeu" else "Passe, Lob ou Tir pour jouer"
+		Message:FireClient(tk.player, `À toi : {string.lower(names[kind] or kind)}`, how, 3)
+	end
+	if kind == "corner" or kind == "freekick" or kind == "penalty" then comment(`{names[kind]} pour les {Config.TEAMS[t].name}, {tk.name} s’en charge.`, 0.15) end
 end
 
 local function inBoxOf(t: number, x: number, y: number): boolean
@@ -815,6 +839,8 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 		return
 	end
 	if card then stats.cards += 1 end
+	comment(if card == "red" then `Carton rouge ! {f.name} est expulsé.` elseif card == "yellow" then `Carton jaune pour {f.name}.`
+		else `Faute de {f.name} sur {v.name}.`, if card then 0.4 else 0.15, card ~= nil or inBox)
 	if inBox then
 		stats.penalties += 1
 		say("Penalty !", sub, 2.2)
@@ -825,7 +851,22 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 	end
 end
 
+-- The match ball (one of balls.glb's, shown by client/BallView) and the line-ups (client/Intro)
+local BALLS = { "classique", "etoiles", "jabu", "brazu", "euro" }
+Net:SetAttribute("MatchBall", BALLS[rng:NextInteger(1, #BALLS)])
+local function publishLineups()
+	local teams = { {}, {} }
+	for _, a in actors do
+		if not a.sentOff then
+			table.insert(teams[a.team], { num = a.num, name = a.name, role = a.role, human = a.player ~= nil })
+		end
+	end
+	for t = 1, 2 do table.sort(teams[t], function(p, q) return p.num < q.num end) end
+	Net:SetAttribute("Lineups", game:GetService("HttpService"):JSONEncode(teams))
+end
+
 local function kickoff(t: number)
+	publishLineups()
 	for _, a in actors do
 		local hx, hy = homeOf(a)
 		-- Everybody in his own half for the kick-off
@@ -837,6 +878,7 @@ local function kickoff(t: number)
 	if tk then place(tk, L / 2 - dir[t] * 0.8, W / 2) end
 	setPiece("kickoff", t, L / 2, W / 2, tk)
 	say("Coup d’envoi", Config.TEAMS[t].name, 1.5)
+	comment(`Coup d’envoi pour les {Config.TEAMS[t].name} !`, 0.2, true)
 end
 
 local function goalFor(t: number)
@@ -855,6 +897,7 @@ local function goalFor(t: number)
 	owner, held, shotBy = nil, false, nil
 	publish()
 	say("BUT !", Config.TEAMS[t].name .. " · " .. scorer, 3.5)
+	comment(if scorer == "contre son camp" then `But contre son camp ! Les {Config.TEAMS[t].name} mènent la danse.` else `BUT de {scorer} pour les {Config.TEAMS[t].name} !`, 1, true)
 	Net:SetAttribute("LastGoalTeam", t)
 	Net:SetAttribute("GoalAt", workspace:GetServerTimeNow())
 	if lastTouch and lastTouch.team == t then act(lastTouch, "siuu") end
@@ -931,23 +974,28 @@ local function tryControl()
 		local d = dist2(x, y, ball.x, ball.y)
 		if a.role == "GK" then
 			local inBox = math.abs(x - ownGoalX(a.team)) < 16.5 and math.abs(y - W / 2) < 20.16
-			local reach = if a.diveT > 0 then 2.6 else 1.7
+			local reach = if a.diveT > 0 then 2.2 else 1.3
 			if inBox and d < reach and ball.z < 2.6 then
-				-- A hard, well placed shot can beat him
-				local chance = if shotBy and shotBy ~= a.team then math.clamp(0.95 - math.max(0, bsp - 14) * 0.03 - d * 0.08, 0.3, 0.95) else 1
+				-- A hard shot, or one placed away from him, beats him more often (a human's shot a little more)
+				local chance = 1
+				if shotBy and shotBy ~= a.team then
+					local shooter = lastTouch
+					chance = math.clamp(0.88 - math.max(0, bsp - 12) * 0.035 - d * 0.18
+						- (if shooter and shooter.player then 0.1 else 0), 0.15, 0.9)
+				end
 				if rng:NextNumber() < chance then
 					giveBall(a)
 					held = true
 					a.holdT = 1.3
 					act(a, "gkCatch", 0.5)
-					if shotBy then say("Arrêt !", a.name, 1) end
+					if shotBy then say("Arrêt !", a.name, 1); comment(`Arrêt de {a.name} !`, 0.35, true) end
 				else
-					ball.vx = -ball.vx * 0.35 + gauss() * 2
-					ball.vy = ball.vy * 0.5 + gauss() * 4
-					ball.vz = math.abs(ball.vz) * 0.4 + 2
-					a.cool = 0.6
-					lastTouch = a
-					shotBy = nil
+					-- Beaten: he only grazes it, the ball goes on (it used to bounce back out, so shots almost never
+					-- went in)
+					ball.vx *= 0.85
+					ball.vy = ball.vy * 0.85 + gauss() * 1.2
+					a.cool = 0.8
+					label(a, "Battu !", Color3.fromRGB(255, 120, 100), 1)
 				end
 				return
 			end
@@ -1107,7 +1155,11 @@ local function botThink(a: Actor, dt: number)
 	local d = dir[t]
 	local hx, hy = homeOf(a)
 	local attacking = owner ~= nil and (owner :: Actor).team == t
-	-- Opponents keep their distance at a restart
+	-- At a restart everybody waits for the taker: his team-mates hold their places, opponents keep their distance
+	if phase == "set" and setTaker and setTaker.team == t and setTaker ~= a then
+		moveBot(a, x, y, 0)
+		return
+	end
 	if phase == "set" and setTaker and setTaker.team ~= t then
 		local tx = hx + (ball.x - L / 2) * 0.5
 		local ty = hy + (ball.y - W / 2) * 0.3
@@ -1191,6 +1243,7 @@ local function assignPlayer(pl: Player)
 	end
 	pl.CharacterAdded:Connect(onChar)
 	if pl.Character then task.spawn(onChar, pl.Character) end
+	publishLineups()
 	if phase == "waiting" then
 		task.delay(2, function() if phase == "waiting" then kickoff(1) end end)
 	end
@@ -1210,6 +1263,7 @@ Players.PlayerRemoving:Connect(function(pl)
 	a.player = nil
 	a.name = Config.NAMES[rng:NextInteger(1, #Config.NAMES)]
 	spawnBot(a)
+	publishLineups()
 	if #Players:GetPlayers() <= 1 then phase = "waiting"; publish() end
 end)
 
@@ -1329,6 +1383,7 @@ RunService.Heartbeat:Connect(function(dt)
 		kickoff(2)
 	elseif phase == "done" and phaseT > 12 then
 		score, half, clock, dir = { 0, 0 }, 1, 0, { 1, -1 }
+		Net:SetAttribute("MatchBall", BALLS[rng:NextInteger(1, #BALLS)])
 		for _, a in actors do
 			a.yellow = 0
 			if a.sentOff and not a.player then spawnBot(a) end
@@ -1344,7 +1399,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- A computer player takes the restart after a short pause; a human has 10 s before it is played for him
 	if phase == "set" and setTaker and owner == setTaker then
 		local tk = setTaker :: Actor
-		if (not tk.player and phaseT > 1.2) or (tk.player and phaseT > 10) then
+		if (not tk.player and phaseT > (if setKindNow == "penalty" then 2.2 elseif setKindNow == "freekick" then 1.8 else 1.2)) or (tk.player and phaseT > 20) then
 			if setKindNow == "corner" then
 				doLob(tk, (oppGoalX(tk.team) - ball.x) / 12, (W / 2 - ball.y) / 34, 0.55)
 			elseif setKindNow == "goalkick" then

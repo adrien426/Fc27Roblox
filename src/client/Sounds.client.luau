@@ -1,6 +1,8 @@
 --!strict
 -- The web game's recorded sounds (sounds/*.mp3, uploaded to Roblox: ids in Shared.AssetIds): crowd bed all match
--- long, the referee's whistle at kick-offs, half time and full time, a roar and the fans' chant after a goal.
+-- long, louder for a moment on a shot, a save, a skill move or a card (Net attribute Crowd), the referee's whistle
+-- at kick-offs, restarts after a foul, half time and full time, a roar and the fans' chant after a goal.
+-- No footsteps: Roblox's default character sounds are replaced by an empty script (src/stubs).
 -- A sound that is not uploaded (id 0) is skipped.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -22,7 +24,7 @@ local function sound(name: string, volume: number, looped: boolean): Sound?
 	return s
 end
 
-local bed = sound("bed", 0.35, true)
+local bed = sound("bed", 0.5, true)
 local chant = sound("chant", 0, true)
 local roar = sound("roar", 0.8, false)
 local whistle = sound("whistle", 0.6, false)
@@ -70,4 +72,85 @@ end)
 Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
 	if roar then (roar :: Sound):Play() end
 	sing()
+end)
+
+-- The crowd rises for a moment (shot, save, dribble, card…), then settles back
+local BED = 0.5
+local swellTween: Tween? = nil
+Net:GetAttributeChangedSignal("CrowdAt"):Connect(function()
+	if not bed then return end
+	local b = bed :: Sound
+	local a = Net:GetAttribute("Crowd")
+	local amount = if type(a) == "number" then math.clamp(a, 0, 1) else 0.3
+	if swellTween then (swellTween :: Tween):Cancel() end
+	b.Volume = BED + amount * 0.55
+	swellTween = TweenService:Create(b, TweenInfo.new(2.2 + amount * 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = BED })
+	;(swellTween :: Tween):Play()
+end)
+
+-- A whistle for fouls (free kicks and penalties)
+Net:GetAttributeChangedSignal("SetKind"):Connect(function()
+	local k = Net:GetAttribute("SetKind")
+	if k == "freekick" or k == "penalty" then blow(1) end
+end)
+
+-- ---------- Commentator's voice ----------
+-- Roblox's text-to-speech reads the commentary out loud. The text is written in French; AutoLocalize translates it
+-- into the player's Roblox language, and the voice is picked to match it (French 401, Spanish 101, German 201,
+-- Italian 301, English 1 otherwise). If text-to-speech is not available, the commentary stays on screen only.
+local LocalizationService = game:GetService("LocalizationService")
+local Players = game:GetService("Players")
+local function voiceFor(locale: string): string
+	local lang = string.lower(string.sub(locale, 1, 2))
+	if lang == "fr" then return "401" elseif lang == "es" then return "101" elseif lang == "de" then return "201"
+	elseif lang == "it" then return "301" end
+	return "1"
+end
+local tts: any = nil
+pcall(function()
+	local locale = LocalizationService.RobloxLocaleId
+	local t: any = (Instance.new :: any)("AudioTextToSpeech") -- newer than the type definitions
+	t.VoiceId = voiceFor(locale)
+	t.Volume = 1.6
+	t.Speed = 1.08
+	t.Parent = SoundService
+	local out = Instance.new("AudioDeviceOutput")
+	out.Parent = SoundService
+	local w = Instance.new("Wire")
+	w.SourceInstance = t
+	w.TargetInstance = out
+	w.Parent = t
+	tts = t
+end)
+local speaking = 0
+Net:GetAttributeChangedSignal("CommentAt"):Connect(function()
+	if not tts or Net:GetAttribute("CommentSpeak") ~= true then return end
+	local text = Net:GetAttribute("Comment")
+	if type(text) ~= "string" then return end
+	speaking += 1
+	local mine = speaking
+	task.spawn(function()
+		local ok = pcall(function()
+			tts:Pause()
+			tts.Text = text
+			tts:LoadAsync()
+			if speaking == mine then tts:Play() end
+		end)
+		Players.LocalPlayer:SetAttribute("Voice", if ok then "ok" else "indisponible")
+	end)
+end)
+
+-- What is playing, shown in the on-screen state line (client/Hud): to understand a silent crowd
+task.spawn(function()
+	while true do
+		local b = bed
+		local state = if not b then "foule : pas de son"
+			elseif b.IsPlaying and b.IsLoaded then string.format("foule : %.0f%%", b.Volume * 100)
+			elseif b.IsLoaded then "foule : arrêtée"
+			else "foule : chargement"
+		local v = Players.LocalPlayer:GetAttribute("Voice")
+		Players.LocalPlayer:SetAttribute("Audio", state .. (if tts then " · voix " .. tostring(v or "prête") else " · voix absente"))
+		if b and b.IsLoaded and not b.IsPlaying then b:Play() end
+		task.wait(2)
+	end
 end)

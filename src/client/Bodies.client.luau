@@ -97,7 +97,7 @@ local function makePlate(st: Body)
 	t.Text = tostring(num)
 	t.TextScaled = true
 	t.Font = Enum.Font.GothamBlack
-	local c = team.color
+	local c = if num == 1 then team.gk else team.color -- the keeper wears his own colour
 	t.TextColor3 = if c.R + c.G + c.B > 2.2 then Color3.new(0.1, 0.1, 0.1) else Color3.new(1, 1, 1)
 	t.Parent = gui
 	p.Parent = st.body

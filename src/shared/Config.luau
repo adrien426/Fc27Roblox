@@ -31,8 +31,9 @@ Config.SPRINT = 25
 Config.STUN_SPEED = 6
 
 Config.TEAMS = {
-	{ name = "Rouges", abbr = "ROU", color = Color3.fromRGB(215, 38, 61), shorts = Color3.fromRGB(244, 244, 244), brick = "Bright red" },
-	{ name = "Bleus", abbr = "BLE", color = Color3.fromRGB(43, 111, 214), shorts = Color3.fromRGB(15, 31, 69), brick = "Bright blue" },
+	-- gk: the keeper's shirt and socks (as in the web game: green for the Reds, yellow for the Blues)
+	{ name = "Rouges", abbr = "ROU", color = Color3.fromRGB(215, 38, 61), shorts = Color3.fromRGB(244, 244, 244), gk = Color3.fromRGB(34, 179, 107), brick = "Bright red" },
+	{ name = "Bleus", abbr = "BLE", color = Color3.fromRGB(43, 111, 214), shorts = Color3.fromRGB(15, 31, 69), gk = Color3.fromRGB(242, 194, 48), brick = "Bright blue" },
 }
 
 -- 4-4-2 for a team attacking towards x = 105 (same layout as the web game): x, y, role, shirt number

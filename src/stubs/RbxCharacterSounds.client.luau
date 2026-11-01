@@ -1,0 +1,3 @@
+-- Replaces Roblox's default character sounds (footsteps on every stride, jumping, landing): a football match is
+-- heard through its crowd and its commentary (client/Sounds, client/Hud), not footsteps. A script with this name in
+-- StarterPlayerScripts stops Roblox from adding its own.
