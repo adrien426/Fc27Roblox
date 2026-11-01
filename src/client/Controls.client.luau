@@ -102,6 +102,42 @@ for _, b in BINDS do
 	end, false, Enum.ContextActionPriority.High.Value, b[2], b[3])
 end
 
+-- Skill move: the move sets the speed and direction and the body keeps facing where it was going. This runs right
+-- after Roblox's own controls each frame and overrides their movement while the move lasts; the controls are never
+-- switched off, so a stick still held at the end of the move carries straight on.
+RunService:BindToRenderStep("FC27SkillMove", Enum.RenderPriority.Input.Value + 1, function()
+	local hum, root = body()
+	if not hum or not root then return end
+	local char = player.Character :: Model
+	local key = char:GetAttribute("Drib")
+	local at = char:GetAttribute("DribAt")
+	local m = if type(key) == "string" then Dribbles.byKey[key] else nil
+	local k = if m and type(at) == "number" then (workspace:GetServerTimeNow() - at) / m.dur else 2
+	if m and k >= 0 and k < 1 then
+		local F = char:GetAttribute("DribF") :: Vector3
+		local S = char:GetAttribute("DribS") :: Vector3
+		local v0 = (char:GetAttribute("DribV0") :: number?) or 0
+		inMove = true
+		local fv, sv = m.v(k)
+		if not m.reverse then fv = math.max(fv, v0 * 0.75) end
+		local v = F * fv + S * sv
+		hum.AutoRotate = false
+		local p = root.Position
+		root.CFrame = CFrame.lookAt(p, p + F)
+		hum.WalkSpeed = v.Magnitude * Config.M
+		hum:Move(if v.Magnitude > 0.05 then v.Unit else Vector3.zero)
+		moveRev = if m.reverse then -F else nil
+	elseif inMove then
+		inMove = false
+		hum.AutoRotate = true
+		if moveRev then
+			local p = root.Position
+			root.CFrame = CFrame.lookAt(p, p + moveRev)
+			moveRev = nil
+		end
+	end
+end)
+
 -- Still playing: moving the stick tells the server (button presses already reach it as actions)
 RunService.Heartbeat:Connect(function()
 	local hum = body()
@@ -185,45 +221,11 @@ RunService.RenderStepped:Connect(function(dt)
 		else
 			stamina = math.min(1, stamina + dt * (if moving then 0.135 else 0.18))
 		end
-		hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
+		if not inMove then
+			hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
+		end
 		player:SetAttribute("Stamina", stamina)
 		player:SetAttribute("Sprinting", sprinting)
-	end
-	-- Skill move: the move sets the speed and direction, the body keeps facing where it was going
-	if hum and root then
-		local char = player.Character :: Model
-		local key = char:GetAttribute("Drib")
-		local at = char:GetAttribute("DribAt")
-		local m = if type(key) == "string" then Dribbles.byKey[key] else nil
-		local k = if m and type(at) == "number" then (workspace:GetServerTimeNow() - at) / m.dur else 2
-		if m and k >= 0 and k < 1 then
-			local F = char:GetAttribute("DribF") :: Vector3
-			local S = char:GetAttribute("DribS") :: Vector3
-			local v0 = (char:GetAttribute("DribV0") :: number?) or 0
-			if not inMove then
-				inMove = true
-				if controls then pcall(function() controls:Disable() end) end
-			end
-			local fv, sv = m.v(k)
-			if not m.reverse then fv = math.max(fv, v0 * 0.75) end
-			local v = F * fv + S * sv
-			hum.AutoRotate = false
-			local p = root.Position
-			root.CFrame = CFrame.lookAt(p, p + F)
-			hum.WalkSpeed = v.Magnitude * Config.M
-			hum:Move(if v.Magnitude > 0.05 then v.Unit else Vector3.zero)
-			moveRev = if m.reverse then -F else nil
-		elseif inMove then
-			inMove = false
-			hum.AutoRotate = true
-			if moveRev then
-				local p = root.Position
-				root.CFrame = CFrame.lookAt(p, p + moveRev)
-				moveRev = nil
-			end
-			hum:Move(Vector3.zero)
-			if controls then pcall(function() controls:Enable() end) end
-		end
 	end
 	-- TV camera: high on the main stand side, following the ball
 	if tvCam then

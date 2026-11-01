@@ -60,6 +60,9 @@ botFolder.Parent = workspace
 
 -- ---------- Match state ----------
 local score = { 0, 0 }
+-- Every goal with what led to it (read by the test hook at the bottom, for scripts/inspect/match.luau)
+local goalLog: { { [string]: any } } = {}
+local boundsHow = "free" -- "free": ball in flight / rolling, "carried": at someone's feet
 local dir = { 1, -1 } -- team 1 attacks towards x = 105 in the first half
 local clock, half = 0, 1
 local phase = "waiting" -- waiting, set, play, goal, break, done
@@ -728,6 +731,14 @@ local function kickoff(t: number)
 end
 
 local function goalFor(t: number)
+	local lt = lastTouch
+	table.insert(goalLog, {
+		team = t, clock = math.floor(clock), how = boundsHow, phase = phase,
+		x = math.floor(ball.x * 100) / 100, y = math.floor(ball.y * 100) / 100, z = math.floor(ball.z * 100) / 100,
+		vx = math.floor(ball.vx * 10) / 10, vy = math.floor(ball.vy * 10) / 10,
+		last = if lt then `{lt.name} ({lt.team}{if lt.player then ", human" else ""}{if lt.role == "GK" then ", GK" else ""})` else "nobody",
+		owner = if owner then (owner :: Actor).name else "none", shot = shotBy or 0, held = held,
+	})
 	score[t] += 1
 	local scorer = if lastTouch and lastTouch.team == t then lastTouch.name else "contre son camp"
 	phase, phaseT = "goal", 0
@@ -1232,7 +1243,7 @@ RunService.Heartbeat:Connect(function(dt)
 					local intoGoal = math.abs(ball.y - W / 2) < GH
 					if not (intoGoal and dir[a.team] > 0) then ball.x = math.min(ball.x, L - 0.15) end
 					if not (intoGoal and dir[a.team] < 0) then ball.x = math.max(ball.x, 0.15) end
-					if phase == "play" then checkBounds(prevX) end
+					if phase == "play" then boundsHow = "carried"; checkBounds(prevX); boundsHow = "free" end
 				end
 			end
 		else
@@ -1276,3 +1287,17 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 publish()
+
+-- ---------- Test hook ----------
+-- For scripts/inspect/match.luau (run on a server with Open Cloud): start a match between computer players and read
+-- the score and every goal with its context. Not reachable from players' machines (ServerStorage).
+local hook = Instance.new("BindableFunction")
+hook.Name = "FC27Test"
+hook.OnInvoke = function(cmd: string): any
+	if cmd == "start" then
+		if phase == "waiting" then kickoff(1) end
+		return true
+	end
+	return { score1 = score[1], score2 = score[2], phase = phase, clock = clock, half = half, goals = goalLog }
+end
+hook.Parent = game:GetService("ServerStorage")
