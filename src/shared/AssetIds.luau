@@ -2,13 +2,13 @@
 -- assets/build/*.glb and assets/source/sounds/*.mp3 with the Open Cloud key. 0 = not uploaded yet: the game then
 -- uses its built-in stand-ins (stadium built from code, standard avatars, plain ball, no recorded sounds).
 return {
-	player = 0,
-	stadium = 0,
-	balls = 0,
+	player = 73631537493084,
+	stadium = 81120181062508,
+	balls = 98156148120151,
 	sounds = {
-		whistle = 0,
-		bed = 0,
-		chant = 0,
-		roar = 0,
+		whistle = 136259723407282,
+		bed = 111053005158227,
+		chant = 138515484233725,
+		roar = 116598049171507,
 	},
 }
