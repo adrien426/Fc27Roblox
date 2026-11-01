@@ -41,6 +41,7 @@ Le jeu reprend les fichiers du jeu web : le footballeur Ch38 (`player.glb`), le 
 | --- | --- | --- |
 | Préparer les modèles | `node prepare-models.mjs` | `assets/build/*.glb` : sans compression Draco, chaque mesh sous 20 000 triangles (limite Roblox), poteaux du stade retirés |
 | Convertir les animations | `node build-anims.mjs` | `src/shared/Clips/*.luau` : un module par clip, joué sur les os du modèle par `src/shared/Skeleton.luau` |
+| Pose de repos du joueur | `node build-rest.mjs` | `src/shared/PlayerRest.luau` : rotation de repos de chaque os de `player.glb` et hauteur des hanches, pour que les clips tournent les os comme dans le jeu web |
 | Uploader | `node upload-assets.mjs` | modèles et sons sur Roblox, numéros dans `src/shared/AssetIds.luau` et `assets/uploaded.json` |
 | Publier une version | `node publish-place.mjs --release preview-<branche>` | le `Fc27.rbxlx` construit par GitHub publié dans une expérience Roblox |
 

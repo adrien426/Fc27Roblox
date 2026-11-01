@@ -1,9 +1,11 @@
 --!strict
 -- Plays the web game's Mixamo clips (Shared.Clips, made by scripts/build-anims.mjs) on the bones of the player
 -- model (player.glb, the Ch38 footballer). The clips hold each bone's local rotation, exactly what three.js sets in
--- the web version; Roblox wants the change from the bone's rest pose, so Bone.Transform = rest⁻¹ · (clip pose).
--- The hips only move up and down (the game moves the player), scaled to the model's own hip height.
+-- the web version; Roblox wants the change from the bone's rest pose, so Bone.Transform = rest⁻¹ · (clip pose),
+-- with the rest pose as it is in player.glb (Shared.PlayerRest): that does not depend on the frames Roblox's
+-- importer gave the bones. The hips only move up and down (the game moves the player), by the model's hip height.
 local Clips = script.Parent:WaitForChild("Clips")
+local PlayerRest = require(script.Parent:WaitForChild("PlayerRest")) :: any
 
 local Skeleton = {}
 
@@ -17,8 +19,8 @@ export type Clip = {
 
 export type Rig = {
 	bones: { [string]: { Bone } },
-	rest: { [string]: CFrame },
 	restInv: { [string]: CFrame },
+	hipsLift: number, -- hips height above the feet, in studs
 }
 
 export type Pose = { [string]: CFrame }
@@ -98,10 +100,9 @@ local function boneKey(name: string): string
 end
 Skeleton.boneKey = boneKey
 
--- Finds the bones of a body and remembers their rest pose (call before animating it)
+-- Finds the bones of a body and remembers their rest pose (call before animating it, body standing in its bind pose)
 function Skeleton.bind(body: Instance): Rig?
 	local bones: { [string]: { Bone } } = {}
-	local rest: { [string]: CFrame } = {}
 	local restInv: { [string]: CFrame } = {}
 	local any = false
 	for _, d in body:GetDescendants() do
@@ -109,15 +110,21 @@ function Skeleton.bind(body: Instance): Rig?
 			local k = boneKey(d.Name)
 			if not bones[k] then
 				bones[k] = {}
-				rest[k] = d.CFrame
-				restInv[k] = d.CFrame:Inverse()
+				local q = PlayerRest.rot[k]
+				local r = if q then CFrame.new(0, 0, 0, q[1], q[2], q[3], q[4]) else d.CFrame.Rotation
+				restInv[k] = r:Inverse()
 			end
 			table.insert(bones[k], d)
 			any = true
 		end
 	end
 	if not any then return nil end
-	return { bones = bones, rest = rest, restInv = restInv }
+	local height = 0
+	if body:IsA("Model") then
+		local _, size = body:GetBoundingBox()
+		height = size.Y
+	end
+	return { bones = bones, restInv = restInv, hipsLift = height * PlayerRest.hipsHeight }
 end
 
 -- Local pose of every animated bone at time t (seconds) of the clip
@@ -136,16 +143,16 @@ function Skeleton.sample(rig: Rig, clip: Clip, t: number, out: Pose?): Pose
 	local i1 = math.clamp(i + 1, 1, last)
 	local i2 = math.clamp(i + 2, 1, last)
 	for name, frames in clip.bones do
-		local r = rig.rest[name]
-		if not r then continue end
+		if not rig.restInv[name] then continue end
 		local rot = frames[i1]:Lerp(frames[i2], k)
-		local pos = r.Position
 		if name == "Hips" and clip.hy then
+			-- Hips raised or lowered from their rest height (the parent's up is the model's up)
 			local hy = clip.hy :: { number }
 			local h = hy[i1] + (hy[i2] - hy[i1]) * k
-			pos = Vector3.new(pos.X, pos.Y * h, pos.Z)
+			pose[name] = CFrame.new(0, rig.hipsLift * (h - 1), 0) * rot
+		else
+			pose[name] = rot
 		end
-		pose[name] = CFrame.new(pos) * rot
 	end
 	return pose
 end

@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Skeleton = require(Shared.Skeleton)
 local Assets = require(script.Parent.Assets)
 
 local Rig = {}
@@ -160,6 +161,21 @@ local function hideAvatar(model: Model, body: Model)
 	model.DescendantAdded:Connect(hide)
 end
 
+-- Where the footballer faces, read from its hip bones (its left is LeftUpLeg's side): it does not depend on how
+-- Roblox's importer turned the model. nil if the bones are missing.
+local function facing(body: Model): Vector3?
+	local l: Bone?, r: Bone? = nil, nil
+	for _, d in body:GetDescendants() do
+		if d:IsA("Bone") then
+			local k = Skeleton.boneKey(d.Name)
+			if k == "LeftUpLeg" then l = d elseif k == "RightUpLeg" then r = d end
+		end
+	end
+	if not l or not r then return nil end
+	local f = ((l :: Bone).WorldPosition - (r :: Bone).WorldPosition):Cross(Vector3.yAxis)
+	return if f.Magnitude > 1e-3 then f.Unit else nil
+end
+
 -- Welds the web game's footballer on this body, in the team kit. Returns false when the model is not loaded.
 local function addBody(model: Model, teamIdx: number, num: number, rng: Random): boolean
 	local tpl = Assets.player
@@ -194,12 +210,20 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 		elseif n:find("Body") then tint(p, ratio(skin, TEX_SKIN), true) end
 	end
 
-	-- Feet on the ground: the R15 root floats HipHeight + half its height above it
+	-- Feet on the ground: an R15 root floats HipHeight + half its height above it, an R6 root stands on 2-stud legs.
+	-- Facing where the character faces (from the hip bones; without them, a Mixamo model faces +Z).
 	local cf, size = body:GetBoundingBox()
-	local hip = if hum then hum.HipHeight else 2
-	local feet = root.CFrame * CFrame.new(0, -(hip + root.Size.Y / 2), 0) * CFrame.Angles(0, Config.BODY_YAW, 0)
-	local rel = (cf * CFrame.new(0, -size.Y / 2, 0)):ToObjectSpace(body:GetPivot())
-	body:PivotTo(feet * rel)
+	local hip = if hum and hum.RigType == Enum.HumanoidRigType.R15 then hum.HipHeight else 2
+	local base = cf * CFrame.new(0, -size.Y / 2, 0)
+	local turn = CFrame.Angles(0, math.pi, 0)
+	local fwd = facing(body)
+	if fwd then
+		local fl = base:VectorToObjectSpace(fwd)
+		fl = Vector3.new(fl.X, 0, fl.Z)
+		if fl.Magnitude > 0.1 then turn = CFrame.lookAt(Vector3.zero, fl.Unit):Inverse() end
+	end
+	local feet = root.CFrame * CFrame.new(0, -(hip + root.Size.Y / 2), 0) * CFrame.Angles(0, Config.BODY_YAW, 0) * turn
+	body:PivotTo(feet * base:ToObjectSpace(body:GetPivot()))
 	for _, p in body:GetDescendants() do
 		if p:IsA("BasePart") then
 			p.Anchored = false
