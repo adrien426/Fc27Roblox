@@ -49,6 +49,8 @@ local Action = remote("Action") :: RemoteEvent
 local BallState = remote("BallState", true) :: any
 local Message = remote("Message") :: RemoteEvent
 Net.Parent = ReplicatedStorage
+local Economy = require(script.Parent.Economy)
+local Shop = require(Shared.Shop)
 
 Pitch.build(Assets.stadium)
 Pitch.buildLobby()
@@ -230,6 +232,14 @@ end
 
 local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: number?, clip: string?)
 	a.kicked = true -- his own shot or pass: not a lost ball
+	local pl = a.player
+	if pl and math.sqrt(vx * vx + vy * vy) > 14 and Economy.owns(pl, "trail") then
+		local tr = Economy.equipOf(pl).trail
+		if tr then
+			Net:SetAttribute("Trail", tr)
+			Net:SetAttribute("TrailAt", workspace:GetServerTimeNow())
+		end
+	end
 	act(a, clip or (if phase == "set" and setKindNow == "throw" then "throwIn" else "kick"))
 	if phase == "set" then phase = "play" end
 	owner, held = nil, false
@@ -506,6 +516,7 @@ local function doTackle(a: Actor)
 		lastTouch = a
 		a.cool = 0.1
 		say("Tacle réussi !", a.name, 0.9)
+		if a.player then Economy.earn(a.player, "tackle") end
 		comment(`Tacle de {a.name}, il récupère le ballon.`, 0.2)
 		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 	else
@@ -854,7 +865,8 @@ local function publishLineups()
 	local teams = { {}, {} }
 	for _, a in actors do
 		if not a.sentOff then
-			table.insert(teams[a.team], { num = a.num, name = a.name, role = a.role, human = a.player ~= nil, slot = a.slot })
+			table.insert(teams[a.team], { num = a.num, name = a.name, role = a.role, human = a.player ~= nil, slot = a.slot,
+				vip = a.player ~= nil and Economy.owns(a.player, "vip") })
 		end
 	end
 	for t = 1, 2 do table.sort(teams[t], function(p, q) return p.num < q.num end) end
@@ -907,7 +919,19 @@ local function goalFor(t: number)
 	comment(if scorer == "contre son camp" then `But contre son camp ! Les {Config.TEAMS[t].name} mènent la danse.` else `BUT de {scorer} pour les {Config.TEAMS[t].name} !`, 1, true)
 	Net:SetAttribute("LastGoalTeam", t)
 	Net:SetAttribute("GoalAt", workspace:GetServerTimeNow())
-	if lastTouch and lastTouch.team == t then act(lastTouch, "siuu") end
+	if lastTouch and lastTouch.team == t then
+		local sc = lastTouch :: Actor
+		local pl = sc.player
+		if pl then
+			Economy.earn(pl, "goal")
+			Economy.stat(pl, "goals")
+			-- His own celebration if he bought them (shop), otherwise none: the team celebrates anyway
+			local cel = Economy.owns(pl, "celebrations") and Economy.equipOf(pl).celebration
+			if cel then act(sc, cel) end
+		else
+			act(sc, "siuu")
+		end
+	end
 end
 
 -- Ball over a line: goal, corner, goal kick or throw-in
@@ -1022,7 +1046,13 @@ local function tryControl()
 			return
 		end
 	end
-	if best then giveBall(best) end
+	if best then
+		local passer = lastTouch
+		if passer and passer ~= best and passer.team == (best :: Actor).team and passer.player then
+			Economy.earn(passer.player :: Player, "pass")
+		end
+		giveBall(best)
+	end
 end
 
 -- ---------- Computer players ----------
@@ -1246,6 +1276,13 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 		task.wait(0.3)
 		if p.player ~= pl then return end
 		attach(p, char)
+		-- What he bought and chose in the shop: boots colour, special shirt
+		local eq = Economy.equipOf(pl)
+		local boots = Economy.owns(pl, "style") and Shop.choice("boots", eq.boots)
+		local kit = Economy.owns(pl, "style") and Shop.choice("kit", eq.kit)
+		char:SetAttribute("BootsColor", if boots then boots.color else nil)
+		char:SetAttribute("KitTint", if kit then kit.color else nil)
+		char:SetAttribute("VIP", Economy.owns(pl, "vip"))
 		Rig.dress(char, t, p.num)
 		Rig.addBody(char, t, p.num, rng)
 		char:SetAttribute("Team", t)
@@ -1287,6 +1324,25 @@ local function leaveMatch(pl: Player)
 	for _, b in actors do if b.player then anyone = true end end
 	if not anyone then phase = "waiting"; publish() end
 end
+
+-- The VIP corner of the locker room: anybody else standing on its carpet is walked back out
+task.spawn(function()
+	local lobby = workspace:WaitForChild("Lobby")
+	local zone = lobby:WaitForChild("VipZone") :: BasePart
+	while true do
+		task.wait(0.5)
+		for _, pl in Players:GetPlayers() do
+			local char = pl.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if not root or not root:IsA("BasePart") or Economy.owns(pl, "vip") then continue end
+			local rel = zone.CFrame:PointToObjectSpace(root.Position)
+			if math.abs(rel.X) < zone.Size.X / 2 and math.abs(rel.Z) < zone.Size.Z / 2 and math.abs(rel.Y) < 8 then
+				root.CFrame = CFrame.new(root.Position - Vector3.new(zone.Size.X / 2 + 3 + rel.X, 0, 0)) * root.CFrame.Rotation
+				Message:FireClient(pl, "Coin VIP", "Réservé aux VIP : le Pass VIP est à la boutique", 2)
+			end
+		end
+	end
+end)
 
 -- Players arrive in the locker room (Pitch.buildLobby) and pick their place there
 local Join = Instance.new("RemoteFunction")
@@ -1419,6 +1475,14 @@ RunService.Heartbeat:Connect(function(dt)
 		elseif half == 2 and clock >= 90 then
 			phase, phaseT = "done", 0
 			resetBall(L / 2, W / 2)
+			for _, a in actors do
+				local pl = a.player
+				if pl then
+					Economy.stat(pl, "matches")
+					if score[a.team] > score[3 - a.team] then Economy.earn(pl, "win"); Economy.stat(pl, "wins")
+					elseif score[1] == score[2] then Economy.earn(pl, "draw") end
+				end
+			end
 			local res = if score[1] == score[2] then "Match nul" elseif score[1] > score[2] then Config.TEAMS[1].name .. " gagnent" else Config.TEAMS[2].name .. " gagnent"
 			say("Fin du match", res .. " · " .. score[1] .. " – " .. score[2], 8)
 		end
