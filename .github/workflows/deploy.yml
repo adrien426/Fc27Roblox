@@ -2,7 +2,8 @@
 #   test -> the TEST experience        (secrets ROBLOX_TEST_UNIVERSE_ID, ROBLOX_TEST_PLACE_ID)
 #   main -> the PRODUCTION experience  (secrets ROBLOX_PROD_UNIVERSE_ID, ROBLOX_PROD_PLACE_ID)
 # Shared secrets: ROBLOX_API_KEY (Open Cloud: assets read+write, universe-places write on both experiences)
-# and ROBLOX_CREATOR_USER_ID (the account that owns the experiences).
+# and ROBLOX_CREATOR_USER_ID (the account that owns the experiences). The ids can be secrets or variables;
+# for test, ROBLOX_UNIVERSE_ID / ROBLOX_PLACE_ID are accepted too.
 # Steps: upload the models and sounds that changed, commit their ids back to the branch, check and build the
 # place with Rojo, publish it. Can also be re-run by hand (Actions > Deploy to Roblox > Run workflow, on test or main).
 name: Deploy to Roblox
@@ -32,11 +33,11 @@ jobs:
       - name: Pick the experience and check the secrets
         env:
           KEY: ${{ secrets.ROBLOX_API_KEY }}
-          CREATOR: ${{ secrets.ROBLOX_CREATOR_USER_ID }}
-          TEST_UNIVERSE: ${{ secrets.ROBLOX_TEST_UNIVERSE_ID }}
-          TEST_PLACE: ${{ secrets.ROBLOX_TEST_PLACE_ID }}
-          PROD_UNIVERSE: ${{ secrets.ROBLOX_PROD_UNIVERSE_ID }}
-          PROD_PLACE: ${{ secrets.ROBLOX_PROD_PLACE_ID }}
+          CREATOR: ${{ secrets.ROBLOX_CREATOR_USER_ID || vars.ROBLOX_CREATOR_USER_ID }}
+          TEST_UNIVERSE: ${{ secrets.ROBLOX_TEST_UNIVERSE_ID || vars.ROBLOX_TEST_UNIVERSE_ID || secrets.ROBLOX_UNIVERSE_ID || vars.ROBLOX_UNIVERSE_ID }}
+          TEST_PLACE: ${{ secrets.ROBLOX_TEST_PLACE_ID || vars.ROBLOX_TEST_PLACE_ID || secrets.ROBLOX_PLACE_ID || vars.ROBLOX_PLACE_ID }}
+          PROD_UNIVERSE: ${{ secrets.ROBLOX_PROD_UNIVERSE_ID || vars.ROBLOX_PROD_UNIVERSE_ID }}
+          PROD_PLACE: ${{ secrets.ROBLOX_PROD_PLACE_ID || vars.ROBLOX_PROD_PLACE_ID }}
         run: |
           if [ "$GITHUB_REF_NAME" = main ]; then P=PROD; U="$PROD_UNIVERSE"; PL="$PROD_PLACE"
           else P=TEST; U="$TEST_UNIVERSE"; PL="$TEST_PLACE"; fi
@@ -46,9 +47,10 @@ jobs:
           [ -n "$U" ] || missing="$missing ROBLOX_${P}_UNIVERSE_ID"
           [ -n "$PL" ] || missing="$missing ROBLOX_${P}_PLACE_ID"
           if [ -n "$missing" ]; then
-            echo "::error::Missing repository secrets:$missing (Settings > Secrets and variables > Actions)"
+            echo "::error::Not found as repository secret or variable:$missing (Settings > Secrets and variables > Actions, tab Secrets or Variables)"
             exit 1
           fi
+          echo "ROBLOX_CREATOR_USER_ID=$CREATOR" >> "$GITHUB_ENV"
           echo "ROBLOX_UNIVERSE_ID=$U" >> "$GITHUB_ENV"
           echo "ROBLOX_PLACE_ID=$PL" >> "$GITHUB_ENV"
 
@@ -69,7 +71,6 @@ jobs:
         working-directory: scripts
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-          ROBLOX_CREATOR_USER_ID: ${{ secrets.ROBLOX_CREATOR_USER_ID }}
         run: node upload-assets.mjs
 
       # Also after a partial failure: the assets already created must keep their ids, or they would be created again
