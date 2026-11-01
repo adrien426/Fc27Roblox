@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local BallPhysics = require(Shared:WaitForChild("BallPhysics"))
+local Dribbles = require(Shared:WaitForChild("Dribbles"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 local BallState = Net:WaitForChild("BallState") :: any
 
@@ -124,8 +125,19 @@ RunService.RenderStepped:Connect(function(dt)
 		local flat = Vector3.new(lv.X, 0, lv.Z)
 		flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.xAxis
 		local groundY = Config.GROUND_Y
+		-- A skill move with its own ball path (Shared.Dribbles): forward, side and height from the player
+		local o = ownerModel :: Model
+		local key = o:GetAttribute("Drib")
+		local m = if type(key) == "string" then Dribbles.byKey[key] else nil
+		local at = o:GetAttribute("DribAt")
+		local k = if m and type(at) == "number" then (workspace:GetServerTimeNow() - at) / m.dur else 2
 		if held then
 			want = Vector3.new(root.Position.X, groundY + 1.0 * M, root.Position.Z) + flat * 0.4 * M
+		elseif m and m.ball and k >= 0 and k < 1 then
+			local F = o:GetAttribute("DribF") :: Vector3
+			local S = o:GetAttribute("DribS") :: Vector3
+			local f, sd, z = (m.ball :: any)(k)
+			want = Vector3.new(root.Position.X, groundY + R + math.max(0, z) * M, root.Position.Z) + (F * f + S * sd) * M
 		else
 			-- One touch per stride, on the right foot, like the web game but kept at the feet (25 cm, up to 45 cm
 			-- at full speed): the ball is nudged ahead and the player catches it up. Speeds in metres per second.

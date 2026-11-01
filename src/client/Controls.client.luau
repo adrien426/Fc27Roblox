@@ -1,5 +1,6 @@
 -- Controls, same keys as the web game: J pass, K shoot (hold for power), I lob (hold: further and higher),
--- L through ball, E tackle, Shift sprint, C TV camera. Gamepad and touch buttons do the same.
+-- L through ball, E tackle (with the ball: a skill move), Shift sprint, C TV camera. Gamepad and touch buttons
+-- do the same.
 -- Running is Roblox's own movement (ZQSD / WASD, stick or thumbstick).
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -8,8 +9,10 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Dribbles = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Dribbles"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Action = Net:WaitForChild("Action") :: RemoteEvent
+local BallState = Net:WaitForChild("BallState") :: any
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -19,6 +22,15 @@ local charging: { kind: string, t0: number }? = nil
 local sprintHeld = false
 local stamina = 1
 local tvCam = false
+local haveBall = false
+
+-- Roblox's own movement controls, switched off while a skill move moves the player
+local controls: any = nil
+pcall(function()
+	controls = (require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")) :: any):GetControls()
+end)
+local inMove = false
+local moveRev: Vector3? = nil
 
 local function body(): (Humanoid?, BasePart?)
 	local char = player.Character
@@ -122,6 +134,12 @@ if UserInputService.TouchEnabled then
 		b.Parent = gui
 	end
 	local dark = Color3.fromRGB(19, 36, 26)
+	-- With the ball, the tackle button does a skill move
+	BallState.OnClientEvent:Connect(function(_s: any, o: any)
+		haveBall = o ~= nil and o == player.Character
+		local b = gui:FindFirstChild("tackle")
+		if b and b:IsA("TextButton") then b.Text = if haveBall then "Dribble" else "Tacle" end
+	end)
 	button("shoot", "Tir", 92, UDim2.new(1, -150, 1, -175), Color3.fromRGB(242, 194, 48), dark)
 	button("pass", "Passe", 76, UDim2.new(1, -250, 1, -110), Color3.fromRGB(244, 247, 240), dark)
 	button("lob", "Lob", 64, UDim2.new(1, -262, 1, -205), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
@@ -156,6 +174,42 @@ RunService.RenderStepped:Connect(function(dt)
 		hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
 		player:SetAttribute("Stamina", stamina)
 		player:SetAttribute("Sprinting", sprinting)
+	end
+	-- Skill move: the move sets the speed and direction, the body keeps facing where it was going
+	if hum and root then
+		local char = player.Character :: Model
+		local key = char:GetAttribute("Drib")
+		local at = char:GetAttribute("DribAt")
+		local m = if type(key) == "string" then Dribbles.byKey[key] else nil
+		local k = if m and type(at) == "number" then (workspace:GetServerTimeNow() - at) / m.dur else 2
+		if m and k >= 0 and k < 1 then
+			local F = char:GetAttribute("DribF") :: Vector3
+			local S = char:GetAttribute("DribS") :: Vector3
+			local v0 = (char:GetAttribute("DribV0") :: number?) or 0
+			if not inMove then
+				inMove = true
+				if controls then pcall(function() controls:Disable() end) end
+			end
+			local fv, sv = m.v(k)
+			if not m.reverse then fv = math.max(fv, v0 * 0.75) end
+			local v = F * fv + S * sv
+			hum.AutoRotate = false
+			local p = root.Position
+			root.CFrame = CFrame.lookAt(p, p + F)
+			hum.WalkSpeed = v.Magnitude * Config.M
+			hum:Move(if v.Magnitude > 0.05 then v.Unit else Vector3.zero)
+			moveRev = if m.reverse then -F else nil
+		elseif inMove then
+			inMove = false
+			hum.AutoRotate = true
+			if moveRev then
+				local p = root.Position
+				root.CFrame = CFrame.lookAt(p, p + moveRev)
+				moveRev = nil
+			end
+			hum:Move(Vector3.zero)
+			if controls then pcall(function() controls:Enable() end) end
+		end
 	end
 	-- TV camera: high on the main stand side, following the ball
 	if tvCam then

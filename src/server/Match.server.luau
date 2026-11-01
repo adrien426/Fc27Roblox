@@ -13,6 +13,7 @@ local BallPhysics = require(Shared.BallPhysics)
 local Assets = require(script.Parent.Assets)
 local Pitch = require(script.Parent.Pitch)
 local Rig = require(script.Parent.Rig)
+local Dribbles = require(Shared.Dribbles)
 
 local M, L, W, G = Config.M, Config.L, Config.W, Config.G
 local GH, BAR = Config.GOAL_HALF, Config.BAR
@@ -87,6 +88,7 @@ type Actor = {
 	team: number, slot: number, role: string, num: number, name: string,
 	player: Player?, model: Model?, hum: Humanoid?, root: BasePart?,
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
+	drib: any?, skillCD: number?,
 }
 local actors: { Actor } = {}
 
@@ -434,6 +436,254 @@ local function doTackle(a: Actor)
 	end
 end
 
+-- ---------- Skill moves (the web game's 31 dribbles, Shared.Dribbles) ----------
+-- The move is picked here with its chance of success and its result rolled at once; the model's attributes
+-- (Drib, DribAt, DribF/DribS = forward and side directions, DribV0) tell every machine to play it: the body's
+-- animation (client/Bodies), the ball at the feet (client/BallView) and, for a human, his own movement
+-- (client/Controls). The server moves the computer players and applies the outcome when the move reaches it.
+local dribbler: Actor? = nil -- after a knock or a flick, he gets first claim on the ball until dribblerT
+local dribblerT = 0
+
+local function now(): number return workspace:GetServerTimeNow() end
+
+local function nearestOpp(a: Actor): (Actor?, number)
+	local x, y = posOf(a)
+	local best, bd = nil, math.huge
+	for _, o in actors do
+		if o.team == a.team or not o.root then continue end
+		local ox, oy = posOf(o)
+		local d = dist2(x, y, ox, oy)
+		if d < bd then best, bd = o, d end
+	end
+	return best, bd
+end
+
+-- A short text above a footballer's head, like the web game's labels
+local function label(a: Actor, text: string, color: Color3, dur: number)
+	local m = a.model
+	local head = m and (m:FindFirstChild("Head") or a.root)
+	if not head then return end
+	local old = head:FindFirstChild("FC27Label")
+	if old then old:Destroy() end
+	local g = Instance.new("BillboardGui")
+	g.Name = "FC27Label"
+	g.Size = UDim2.fromOffset(260, 26)
+	g.StudsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+	g.AlwaysOnTop = true
+	g.MaxDistance = 90
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Text = text
+	t.TextScaled = true
+	t.Font = Enum.Font.GothamBlack
+	t.TextColor3 = color
+	t.TextStrokeTransparency = 0.4
+	t.Parent = g
+	g.Parent = head
+	task.delay(dur, function() if g.Parent then g:Destroy() end end)
+end
+
+local TIER_COLOR = {
+	[0] = Color3.fromRGB(255, 90, 80), [1] = Color3.fromRGB(255, 190, 70),
+	[2] = Color3.fromRGB(120, 230, 120), [3] = Color3.fromRGB(80, 220, 255),
+}
+
+-- Opponents close by are left behind (stunned for a moment); in front only unless the move was perfect
+local function beatDefenders(a: Actor, range: number, stunT: number, coolT: number, frontOnly: boolean): Actor?
+	local d = a.drib
+	local x, y = posOf(a)
+	local victim = nil
+	for _, o in actors do
+		if o.team == a.team or o.role == "GK" or not o.root then continue end
+		local ox, oy = posOf(o)
+		local dd = dist2(x, y, ox, oy)
+		if dd > range then continue end
+		local front = ((ox - x) * d.fx + (oy - y) * d.fy) / math.max(dd, 1e-3)
+		if frontOnly and front < -0.25 then continue end
+		stunActor(o, math.max(o.stun, stunT))
+		o.cool = math.max(o.cool, coolT)
+		victim = victim or o
+	end
+	return victim
+end
+
+local function endDribble(a: Actor)
+	local d = a.drib
+	if not d then return end
+	a.drib = nil
+	local m = a.model
+	if m then
+		for _, k in { "Drib", "DribAt", "DribF", "DribS", "DribV0" } do m:SetAttribute(k, nil) end
+	end
+	local hum, root = a.hum, a.root
+	if hum then hum.AutoRotate = true end
+	-- Drag-backs end facing back (computer players; a human's machine turns him)
+	if d.m.reverse and root and not a.player then
+		local p = root.Position
+		root.CFrame = CFrame.lookAt(p, p - Vector3.new(d.fx, 0, d.fy))
+	end
+end
+
+local function dribbleOutcome(a: Actor)
+	local d = a.drib
+	d.done = true
+	local m: Dribbles.Move = d.m
+	local q: number = d.q
+	label(a, `{m.name} {math.floor(d.c * 100 + 0.5)} % : {Dribbles.RESULT[q]}`, TIER_COLOR[q], 1.6)
+	local opp, od = nearestOpp(a)
+	local knock = m.knock
+	if knock then
+		local bvx, bvy, bvz
+		if knock.v == "through" then
+			local tx, ty = d.fx, d.fy
+			if opp then
+				local ox, oy = posOf(opp)
+				tx, ty = ox - ball.x, oy - ball.y
+			end
+			local n = math.max(math.sqrt(tx * tx + ty * ty), 1e-3)
+			bvx, bvy, bvz = tx / n * 9.5, ty / n * 9.5, 0.1
+		else
+			local v = knock.v :: { number }
+			bvx, bvy, bvz = d.fx * v[1] + d.sx * v[2], d.fy * v[1] + d.sy * v[2], v[3]
+		end
+		if q == 0 then
+			if opp and od < 4 then
+				-- Straight to the defender
+				local ox, oy = posOf(opp)
+				local dx, dy = ox - ball.x, oy - ball.y
+				local n = math.max(math.sqrt(dx * dx + dy * dy), 1e-3)
+				bvx, bvy, bvz = dx / n * 6, dy / n * 6, 0.1
+				opp.stun, opp.cool = 0, 0
+			else
+				local ang = (if rng:NextNumber() < 0.5 then -1 else 1) * rng:NextNumber(0.5, 0.9)
+				local c, sn = math.cos(ang), math.sin(ang)
+				bvx, bvy = (bvx * c - bvy * sn) * 1.4, (bvx * sn + bvy * c) * 1.4
+			end
+		elseif q == 1 then
+			bvx, bvy, bvz = bvx * 0.8, bvy * 0.8, bvz * 0.85
+		end
+		if owner == a then
+			owner, held = nil, false
+			ball.vx, ball.vy, ball.vz = bvx, bvy, bvz
+			ball.z = math.max(ball.z, 0.05)
+			ball.spin, ball.tspin = 0, 0
+			lastTouch = a
+			shotBy, target = nil, nil
+			a.cool = 0.28
+			if q >= 1 then dribbler, dribblerT = a, now() + 1.8 end
+		end
+		if q >= 2 and knock.v == "through" and opp then
+			stunActor(opp, math.max(opp.stun, 0.9))
+			opp.cool = 1
+		end
+		if q >= 2 then beatDefenders(a, 3.6, if q == 3 then 1.2 else 0.8, 1, true) end
+	elseif q == 0 then
+		-- Missed: the ball goes to the defender, or rolls away
+		if owner == a then
+			if opp and od < 2.6 then
+				giveBall(opp)
+			else
+				owner = nil
+				ball.vx, ball.vy, ball.vz = d.fx * 4.5 + gauss() * 0.8, d.fy * 4.5 + gauss() * 0.8, 0.1
+				lastTouch = a
+				a.cool = 0.25
+				dribbler, dribblerT = a, now() + 1.2
+			end
+		end
+		stunActor(a, math.max(a.stun, 0.25))
+	elseif q == 1 then
+		d.v0 *= 0.5 -- keeps the ball, but slowed down and the defender is not beaten
+	end
+	if q <= 1 then
+		if a.player and q == 0 then say(`{m.name} raté !`, a.name, 1.2) end
+		if not knock then endDribble(a) end
+		return
+	end
+	if not knock then
+		if q == 3 then beatDefenders(a, 4.5, 1.2, 0.8, false) else beatDefenders(a, 3.6, 0.8, 0.4, true) end
+	end
+	-- A shot fake near the goal can send the keeper the wrong way
+	if m.fake == "shot" then
+		for _, gk in actors do
+			if gk.team ~= a.team and gk.role == "GK" and gk.root then
+				local x, y = posOf(a)
+				if dist2(x, y, oppGoalX(a.team), W / 2) < 25 and rng:NextNumber() < 0.55 then
+					act(gk, if rng:NextNumber() < 0.5 then "diveL" else "diveR", 0.9)
+					stunActor(gk, 0.9)
+				end
+			end
+		end
+	end
+	if q == 3 and a.player then say(`{m.name} parfait !`, a.name, 1.4) end
+end
+
+-- Starts a skill move for the player who has the ball. (ix, iy): where his stick points, to choose the side
+local function doSkill(a: Actor, ix: number?, iy: number?)
+	local t = now()
+	if a.drib or (a.skillCD or 0) > t or owner ~= a or held or not a.model then return end
+	local opp, od = nearestOpp(a)
+	local m = Dribbles.pick(rng, opp ~= nil and od < 4.5)
+	local fx, fy = facingOf(a)
+	local sx, sy = -fy, fx -- the player's right (pitch x/y)
+	local function flip() sx, sy = -sx, -sy end
+	local lateral = if ix and iy then ix * sx + iy * sy else 0
+	if math.abs(lateral) > 0.3 then
+		if lateral < 0 then flip() end
+	elseif opp and od < 6 then
+		local ox, oy = posOf(opp)
+		local x, y = posOf(a)
+		if (ox - x) * sx + (oy - y) * sy > 0 then flip() end
+	elseif rng:NextNumber() < 0.5 then
+		flip()
+	end
+	local stamina = if a.player then (a.player:GetAttribute("Stamina") :: number?) else nil
+	local c = Dribbles.chance(m, if od < 10 then od else nil, stamina)
+	if not a.player then c = math.clamp(c + 0.05, 0, 1) end
+	local vx, vy = velOf(a)
+	local d = {
+		m = m, t0 = t, fx = fx, fy = fy, sx = sx, sy = sy, c = c, q = Dribbles.quality(c, rng:NextNumber()),
+		done = false, v0 = math.sqrt(vx * vx + vy * vy),
+	}
+	a.drib = d
+	a.skillCD = t + m.dur + 0.55
+	local model = a.model :: Model
+	model:SetAttribute("DribF", Vector3.new(fx, 0, fy))
+	model:SetAttribute("DribS", Vector3.new(sx, 0, sy))
+	model:SetAttribute("DribV0", d.v0)
+	model:SetAttribute("DribAt", t)
+	model:SetAttribute("Drib", m.key)
+	label(a, `{m.name} {string.rep("★", m.stars)} {math.floor(c * 100 + 0.5)} %`, Color3.fromRGB(201, 182, 255), m.dur + 0.2)
+end
+
+-- Every frame for a player in a move: outcome when it is time, and the computer players' movement
+local function dribbleStep(a: Actor)
+	local d = a.drib
+	if not d then return end
+	local m: Dribbles.Move = d.m
+	local k = (now() - d.t0) / m.dur
+	if k >= 1 or a.stun > 0.3 then
+		if not d.done and a.stun <= 0.3 then dribbleOutcome(a) end
+		endDribble(a)
+		return
+	end
+	if not d.done and k >= Dribbles.decideAt(m) then
+		dribbleOutcome(a)
+		if not a.drib then return end
+	end
+	local hum, root = a.hum, a.root
+	if a.player or not hum or not root then return end
+	local fv, sv = m.v(k)
+	if not m.reverse then fv = math.max(fv, d.v0 * 0.75) end
+	local vx, vy = d.fx * fv + d.sx * sv, d.fy * fv + d.sy * sv
+	local sp = math.sqrt(vx * vx + vy * vy)
+	hum.AutoRotate = false
+	local p = root.Position
+	root.CFrame = CFrame.lookAt(p, p + Vector3.new(d.fx, 0, d.fy))
+	hum.WalkSpeed = sp * M
+	if sp > 0.05 then hum:Move(Vector3.new(vx / sp, 0, vy / sp)) else hum:Move(Vector3.zero) end
+end
+
 -- ---------- Restarts ----------
 local function nearestOf(t: number, x: number, y: number, preferHuman: boolean?): Actor?
 	local best, bd = nil, math.huge
@@ -541,6 +791,15 @@ end
 -- ---------- Possession and keepers ----------
 local function tryControl()
 	if owner then return end
+	local db = dribbler
+	if db and now() < dribblerT and db.cool <= 0 and db.stun <= 0 and ball.z < 1.6 and db.root then
+		local x, y = posOf(db)
+		if dist2(x, y, ball.x, ball.y) < 1.8 then
+			dribbler = nil
+			giveBall(db)
+			return
+		end
+	end
 	local bsp = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
 	local best, bd = nil, math.huge
 	for _, a in actors do
@@ -615,6 +874,7 @@ local function chaserOf(t: number): Actor?
 end
 
 local function botWithBall(a: Actor, dt: number)
+	if a.drib then return end -- dribbleStep moves him
 	local x, y = posOf(a)
 	local d = dir[a.team]
 	if held then
@@ -646,6 +906,15 @@ local function botWithBall(a: Actor, dt: number)
 			local gdx, gdy = (gx - x) / gd, (W / 2 + gauss() * 2.5 - y) / gd
 			doShoot(a, gdx, gdy, rng:NextNumber(0.55, 0.85))
 			return
+		end
+		-- A defender right in front: sometimes a skill move instead of a pass
+		if pressure < 3 and rng:NextNumber() < 0.3 then
+			local o = nearestOpp(a)
+			if o then
+				local ox, oy = posOf(o)
+				local fx, fy = facingOf(a)
+				if (ox - x) * fx + (oy - y) * fy > 0 then doSkill(a); return end
+			end
 		end
 		if pressure < 3.5 or rng:NextNumber() < 0.15 then
 			local m = bestPass(a, d, 0, -0.1) or bestPass(a, nil, nil)
@@ -806,7 +1075,10 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	local n = math.sqrt(dx * dx + dz * dz)
 	local fx, fy
 	if n > 0.1 then fx, fy = dx / n, dz / n else fx, fy = facingOf(a) end
-	if kind == "tackle" then doTackle(a); return end
+	if kind == "tackle" then
+		if owner == a and not held then doSkill(a, fx, fy) else doTackle(a) end
+		return
+	end
 	if owner ~= a or held then return end
 	if kind == "pass" then doPass(a, fx, fy)
 	elseif kind == "through" then doThrough(a, fx, fy)
@@ -854,6 +1126,9 @@ RunService.Heartbeat:Connect(function(dt)
 		a.stun = math.max(0, a.stun - dt)
 	end
 	separate()
+	for _, a in actors do
+		if a.drib then dribbleStep(a) end
+	end
 
 	if phase == "play" or phase == "set" then
 		clock += dt * 90 / (Config.MATCH_MINUTES * 60)
@@ -904,8 +1179,13 @@ RunService.Heartbeat:Connect(function(dt)
 				local x, y = posOf(a)
 				local fx, fy = facingOf(a)
 				local vx, vy = velOf(a)
+				local d = a.drib
+				local bf = d and d.m.ball
 				if held then
 					ball.x, ball.y, ball.z = x + fx * 0.4, y + fy * 0.4, 1.0
+				elseif bf then
+					local f, sd, z = bf(math.clamp((now() - d.t0) / d.m.dur, 0, 1))
+					ball.x, ball.y, ball.z = x + d.fx * f + d.sx * sd, y + d.fy * f + d.sy * sd, math.max(0, z)
 				else
 					ball.x, ball.y, ball.z = x + fx * 0.75, y + fy * 0.75, 0
 				end
