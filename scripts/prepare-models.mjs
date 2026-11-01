@@ -95,10 +95,52 @@ function report(name, doc) {
 
 mkdirSync(OUT, { recursive: true });
 
-// Player: already light, only decompressed (skinning and bones kept as they are)
+// One skin with the whole skeleton for every piece of the player. In player.glb each piece (shoes, hair, shirt...)
+// has its own skin with only the bones it uses: Roblox then gives that piece a skeleton cut at that point (the
+// shoes' starts at the shin, the hair's at the upper back), so the shoes stay on the ground and the hair stays
+// behind when the body moves. The pieces' joint indices are renumbered into the shared skin.
+function unifySkins(doc) {
+  const root = doc.getRoot();
+  const skins = root.listSkins();
+  if (skins.length < 2) return;
+  const ibm = new Map();
+  for (const s of skins) {
+    const m = s.getInverseBindMatrices().getArray();
+    s.listJoints().forEach((j, i) => { if (!ibm.has(j)) ibm.set(j, m.slice(i * 16, i * 16 + 16)); });
+  }
+  const hips = skins[0].listJoints().find(j => /Hips$/.test(j.getName())) || skins[0].listJoints()[0];
+  const joints = [];
+  (function walk(n) { if (ibm.has(n)) joints.push(n); n.listChildren().forEach(walk); })(hips);
+  if (joints.length !== ibm.size) throw new Error(`player: ${ibm.size - joints.length} joints outside the skeleton`);
+  const index = new Map(joints.map((j, i) => [j, i]));
+  const mats = new Float32Array(joints.length * 16);
+  joints.forEach((j, i) => mats.set(ibm.get(j), i * 16));
+  const skin = doc.createSkin('Skeleton').setSkeleton(hips)
+    .setInverseBindMatrices(doc.createAccessor('InverseBindMatrices').setType('MAT4').setArray(mats).setBuffer(root.listBuffers()[0]));
+  joints.forEach(j => skin.addJoint(j));
+  for (const node of root.listNodes()) {
+    const old = node.getSkin();
+    if (!old || old === skin) continue;
+    const map = old.listJoints().map(j => index.get(j));
+    for (const prim of node.getMesh().listPrimitives()) {
+      for (const sem of prim.listSemantics().filter(n => n.startsWith('JOINTS_'))) {
+        const acc = prim.getAttribute(sem);
+        const src = acc.getArray();
+        const out = new Uint16Array(src.length);
+        for (let i = 0; i < src.length; i++) out[i] = map[src[i]];
+        prim.setAttribute(sem, doc.createAccessor(sem).setType('VEC4').setArray(out).setBuffer(acc.getBuffer()));
+      }
+    }
+    node.setSkin(skin);
+  }
+  for (const s of skins) s.dispose();
+}
+
+// Player: decompressed, its pieces share one whole skeleton (bones and skinning otherwise kept as they are)
 {
   const doc = await io.read(join(SRC, 'player.glb'));
   decompress(doc);
+  unifySkins(doc);
   await doc.transform(prune(), dedup());
   report('player', doc);
   await io.write(join(OUT, 'player.glb'), doc);
