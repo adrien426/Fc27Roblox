@@ -16,3 +16,7 @@
 - Attendre que « Deploy to Roblox » soit vert sur `test`, donner le lien pour jouer, et dire ce qu'il faut vérifier en jeu.
 - **Ne fusionner `test` dans `main`** (déploiement en production) **que lorsque l'utilisateur a validé le test.**
 - Pas de pull request sans demande explicite.
+- **États stables :** un tag `stable-N` n'est posé **que lorsque l'utilisateur le demande explicitement** (« tag
+  stable »), jamais automatiquement à chaque passage dans `main`. Il se pose avec le workflow « Tag stable », lancé à
+  la main (le proxy de session ne permet pas de pousser un tag directement).
+  Pour revenir à un état stable : `git checkout -b <branche> stable-N`, puis le chemin habituel `test` → `main`.

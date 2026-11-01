@@ -1,0 +1,45 @@
+# Marks a state of the game known to be good with a tag stable-N (stable-1, stable-2...), to come back to it later.
+# Only run by hand, when the owner asks for it: merging into main never tags anything.
+# Actions > Tag stable > Run workflow: by default the current main gets the next number.
+# To go back to a stable state: merge (or reset a branch to) the tag, e.g. git checkout -b fix stable-3.
+name: Tag stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch to mark (default main)
+        default: main
+      note:
+        description: What this stable state has (shown on the tag)
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+      - name: Create the next stable-N tag
+        env:
+          NOTE: ${{ inputs.note }}
+        run: |
+          set -euo pipefail
+          git fetch --tags -q
+          last=$(git tag -l 'stable-*' | sed 's/stable-//' | sort -n | tail -1)
+          next="stable-$(( ${last:-0} + 1 ))"
+          sha=$(git rev-parse HEAD)
+          if git tag --points-at "$sha" | grep -q '^stable-'; then
+            echo "Already tagged: $(git tag --points-at "$sha" | grep '^stable-')" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898341+github-actions[bot]@users.noreply.github.com" \
+            tag -a "$next" "$sha" -m "${NOTE:-Stable state} ($(git log -1 --format=%s "$sha"))"
+          git push -q origin "$next"
+          echo "### $next → ${sha::7}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${NOTE:-}" >> "$GITHUB_STEP_SUMMARY"
