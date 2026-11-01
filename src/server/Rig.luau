@@ -188,10 +188,9 @@ local function addBody(model: Model, teamIdx: number, num: number, rng: Random):
 	local body = tpl:Clone()
 	body.Name = "Body"
 
-	-- Height: 1.8 m, give or take a few centimetres (in the bind pose, the model's box is its height)
+	-- Height: the model's own (in the bind pose, the model's box is its height)
 	local _, size0 = body:GetBoundingBox()
-	local ht = rng:NextNumber(0.96, 1.04)
-	body:ScaleTo(body:GetScale() * Config.PLAYER_HEIGHT * Config.M * ht / math.max(0.1, size0.Y))
+	body:ScaleTo(body:GetScale() * Config.PLAYER_HEIGHT * Config.M / math.max(0.1, size0.Y))
 
 	-- Kit and looks: shirt and socks in the team colour, shorts, boots, skin tone, hair colour or a shaved head
 	local skin = SKIN[rng:NextInteger(1, #SKIN)]
