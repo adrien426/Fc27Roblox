@@ -19,9 +19,9 @@ async function call(method, url, body) {
   return text ? JSON.parse(text) : {};
 }
 
-let task = await call('POST', `${API}/universes/${universe}/places/${place}/luau-execution-session-tasks`, { script, timeout: '120s' });
+let task = await call('POST', `${API}/universes/${universe}/places/${place}/luau-execution-session-tasks`, { script, timeout: '240s' });
 for (let i = 0; !['COMPLETE', 'FAILED', 'CANCELLED'].includes(task.state); i++) {
-  if (i > 90) throw new Error('Still running after 3 minutes');
+  if (i > 150) throw new Error('Still running after 5 minutes');
   await sleep(2000);
   task = await call('GET', `${API}/${task.path}`);
 }
