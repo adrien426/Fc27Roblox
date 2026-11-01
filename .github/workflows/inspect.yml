@@ -1,0 +1,28 @@
+# Runs a Luau script from scripts/inspect/ on a server of the TEST experience (Open Cloud Luau Execution) and shows
+# what it prints: a look inside the live game without Studio. Actions > Inspect the test game > Run workflow.
+name: Inspect the test game
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Script in scripts/inspect/
+        default: player.luau
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the script on a Roblox server
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_TEST_UNIVERSE_ID || vars.ROBLOX_TEST_UNIVERSE_ID || secrets.ROBLOX_UNIVERSE_ID || vars.ROBLOX_UNIVERSE_ID }}
+          ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_TEST_PLACE_ID || vars.ROBLOX_TEST_PLACE_ID || secrets.ROBLOX_PLACE_ID || vars.ROBLOX_PLACE_ID }}
+        run: node scripts/run-luau.mjs "scripts/inspect/${{ inputs.script }}"
