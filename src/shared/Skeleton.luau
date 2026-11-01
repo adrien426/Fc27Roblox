@@ -94,6 +94,30 @@ function Skeleton.clip(name: string): Clip?
 end
 
 -- ---------- Rig ----------
+-- Box of the visible pieces (MeshParts) of a model, in the model's own axes. Roblox's importer adds a 2 x 2 x 1
+-- "RootPart" under the hips that holds the bones: Model:GetBoundingBox counts it, which made the footballer
+-- 2.78 units tall instead of 1.785 and put his "feet" 1 unit under the real ones.
+function Skeleton.meshBox(model: Model): (CFrame, Vector3)
+	local piv = model:GetPivot()
+	local big = math.huge
+	local mn, mx = Vector3.new(big, big, big), Vector3.new(-big, -big, -big)
+	for _, d in model:GetDescendants() do
+		if d:IsA("MeshPart") then
+			local h = d.Size / 2
+			for _, sx in { -1, 1 } do
+				for _, sy in { -1, 1 } do
+					for _, sz in { -1, 1 } do
+						local p = piv:PointToObjectSpace(d.CFrame:PointToWorldSpace(Vector3.new(h.X * sx, h.Y * sy, h.Z * sz)))
+						mn, mx = mn:Min(p), mx:Max(p)
+					end
+				end
+			end
+		end
+	end
+	if mn.X == big then return model:GetBoundingBox() end
+	return piv * CFrame.new((mn + mx) / 2), mx - mn
+end
+
 -- "mixamorig5:LeftArm" -> "LeftArm" (also when the importer turned the ":" into "_" or ".")
 local function boneKey(name: string): string
 	return (string.gsub(name, "^mixamorig%d*[:_%.]?", ""))
@@ -121,7 +145,7 @@ function Skeleton.bind(body: Instance): Rig?
 	if not any then return nil end
 	local height = 0
 	if body:IsA("Model") then
-		local _, size = body:GetBoundingBox()
+		local _, size = Skeleton.meshBox(body)
 		height = size.Y
 	end
 	return { bones = bones, restInv = restInv, hipsLift = height * PlayerRest.hipsHeight }
