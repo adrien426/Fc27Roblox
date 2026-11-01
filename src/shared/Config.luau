@@ -23,7 +23,9 @@ Config.BALL_MODEL = "classique"
 Config.MATCH_MINUTES = 6
 -- Roblox user ids of the game's other creators (the owner is recognised by himself): the shop is free for them.
 -- Roblox does not let a script read an experience's collaborators, so they are listed here.
-Config.CREATORS = {} :: { number }
+Config.CREATORS = {
+	3900012132, -- salutatous123456
+} :: { number }
 
 Config.IDLE_KICK = 120 -- seconds without touching the controls before a player is replaced by the computer -- real minutes for the full 90'
 Config.TEAM_SIZE = 11
