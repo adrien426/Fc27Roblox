@@ -792,7 +792,7 @@ local function setPiece(kind: string, t: number, x: number, y: number, taker: Ac
 	publish()
 	local names = { corner = "Corner", freekick = "Coup franc", penalty = "Penalty", throw = "Touche", goalkick = "Six mètres", kickoff = "Coup d’envoi" }
 	if tk.player then
-		-- Everybody waits for him (20 s at most)
+		-- Everybody waits for him (8 s at most, then it is played for him)
 		local how = if kind == "penalty" then "Vise avec le joystick, puis Tir" elseif kind == "throw" then "Passe pour remettre en jeu" else "Passe, Lob ou Tir pour jouer"
 		Message:FireClient(tk.player, `À toi : {string.lower(names[kind] or kind)}`, how, 3)
 	end
@@ -874,7 +874,16 @@ local function kickoff(t: number)
 		place(a, hx, hy)
 		a.stun, a.cool, a.diveT = 0, 0, 0
 	end
-	local tk = nearestOf(t, L / 2, W / 2, true)
+	-- A computer player kicks off, so that nobody waits for a human who does not know it is his turn
+	local tk: Actor? = nil
+	local bd = math.huge
+	for _, a in actors do
+		if a.team == t and not a.player and a.role ~= "GK" and a.root then
+			local hx, hy = homeOf(a)
+			local d = dist2(hx, hy, L / 2, W / 2)
+			if d < bd then tk, bd = a, d end
+		end
+	end
 	if tk then place(tk, L / 2 - dir[t] * 0.8, W / 2) end
 	setPiece("kickoff", t, L / 2, W / 2, tk)
 	say("Coup d’envoi", Config.TEAMS[t].name, 1.5)
@@ -1399,7 +1408,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- A computer player takes the restart after a short pause; a human has 10 s before it is played for him
 	if phase == "set" and setTaker and owner == setTaker then
 		local tk = setTaker :: Actor
-		if (not tk.player and phaseT > (if setKindNow == "penalty" then 2.2 elseif setKindNow == "freekick" then 1.8 else 1.2)) or (tk.player and phaseT > 20) then
+		if (not tk.player and phaseT > (if setKindNow == "penalty" then 2.2 elseif setKindNow == "freekick" then 1.8 else 1.2)) or (tk.player and phaseT > 8) then
 			if setKindNow == "corner" then
 				doLob(tk, (oppGoalX(tk.team) - ball.x) / 12, (W / 2 - ball.y) / 34, 0.55)
 			elseif setKindNow == "goalkick" then
@@ -1497,10 +1506,15 @@ RunService.Heartbeat:Connect(function(dt)
 		Net:SetAttribute("Phase", phase)
 		-- What the server sees, shown small on screen next to the version (to understand a stuck ball)
 		local c1, c2 = chaserOf(1), chaserOf(2)
-		Net:SetAttribute("Debug", string.format("%s%s · ballon : %s · chasseurs : %s / %s · cible : %s",
+		local humans = {}
+		for _, a in actors do
+			if a.player then table.insert(humans, `{a.name} ({Config.TEAMS[a.team].abbr} {a.num})`) end
+		end
+		Net:SetAttribute("Debug", string.format("%s%s · ballon : %s · chasseurs : %s / %s · cible : %s · humains : %s",
 			phase, if phase == "set" then " " .. tostring(setKindNow) else "",
 			if owner then (owner :: Actor).name .. (if held then " (mains)" else "") else "libre",
-			if c1 then c1.name else "—", if c2 then c2.name else "—", if target then (target :: Actor).name else "—"))
+			if c1 then c1.name else "—", if c2 then c2.name else "—", if target then (target :: Actor).name else "—",
+			if #humans > 0 then table.concat(humans, ", ") else "—"))
 	end
 	-- A human who loses the ball is told how (a shot or pass of his own is not a loss)
 	if owner ~= lastOwner then
