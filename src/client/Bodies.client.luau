@@ -102,15 +102,18 @@ local function makePlate(st: Body)
 	st.plate = p
 end
 
-local function add(body: Instance)
-	if not body:IsA("Model") then return end
-	local model = body.Parent
-	if not model or not model:IsA("Model") then return end
+local function add(inst: Instance)
+	if not inst:IsA("Model") then return end
+	local body = inst :: Model
+	local parent = body.Parent
+	if not parent or not parent:IsA("Model") then return end
+	local model = parent :: Model
 	local rig = Skeleton.bind(body)
 	if not rig then return end
-	local root = model:FindFirstChild("HumanoidRootPart")
+	local r = model:FindFirstChild("HumanoidRootPart")
+	local root: BasePart? = if r and r:IsA("BasePart") then r :: BasePart else nil
 	local st: Body = {
-		model = model, body = body, root = if root and root:IsA("BasePart") then root else nil, rig = rig,
+		model = model, body = body, root = root, rig = rig :: Skeleton.Rig,
 		seed = math.random(0, 1000), cur = "", fade = 1, phase = {}, acc = 0,
 	}
 	bodies[model] = st
@@ -185,9 +188,9 @@ local function choose(st: Body, now: number, dt: number): (string, number)
 		end
 	end
 	-- 4. Moving
-	local root = st.root
 	local isGK = m:GetAttribute("Role") == "GK"
-	if not root then return loop(st, "idleN", dt, 1) end
+	if not st.root then return loop(st, "idleN", dt, 1) end
+	local root = st.root :: BasePart
 	local v = root.AssemblyLinearVelocity
 	local flat = Vector3.new(v.X, 0, v.Z)
 	local speed = flat.Magnitude / M
@@ -212,7 +215,7 @@ local function update(st: Body, now: number, dt: number)
 	local name, t = choose(st, now, dt)
 	local clip = Skeleton.clip(name) or Skeleton.clip("idle")
 	if not clip then return end
-	local pose = Skeleton.sample(st.rig, clip, t)
+	local pose = Skeleton.sample(st.rig, clip :: Skeleton.Clip, t)
 	if name ~= st.cur then
 		st.from = st.last
 		st.fade = 0

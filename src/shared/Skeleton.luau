@@ -55,7 +55,8 @@ local cache: { [string]: Clip | false } = {}
 -- The clip called `name`, decoded on first use (nil if there is no such clip)
 function Skeleton.clip(name: string): Clip?
 	local c = cache[name]
-	if c ~= nil then return c or nil end
+	if c == false then return nil end
+	if c then return c :: Clip end
 	local mod = Clips:FindFirstChild(name)
 	if not mod or not mod:IsA("ModuleScript") then
 		cache[name] = false
@@ -120,7 +121,7 @@ end
 
 -- Local pose of every animated bone at time t (seconds) of the clip
 function Skeleton.sample(rig: Rig, clip: Clip, t: number, out: Pose?): Pose
-	local pose = out or {}
+	local pose: Pose = out or {}
 	local d = clip.duration
 	if clip.loop and d > 0 then
 		t %= d
@@ -150,7 +151,7 @@ end
 
 -- Mix of two poses (w = 0: a, w = 1: b); bones missing from one side keep the other
 function Skeleton.blend(a: Pose, b: Pose, w: number, out: Pose?): Pose
-	local pose = out or {}
+	local pose: Pose = out or {}
 	for name, cb in b do
 		local ca = a[name]
 		pose[name] = if ca then ca:Lerp(cb, w) else cb
