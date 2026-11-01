@@ -1,7 +1,8 @@
 --!strict
 -- The arrival in the stadium, like the web game's intro: the camera flies round the stadium, the match ball is
 -- revealed spinning (Net attribute MatchBall, drawn by the server), then the line-ups of both sides (Net attribute
--- Lineups). A tap, a click or any key skips it. Played once, when the player arrives.
+-- Lineups). The "Passer" button (or Enter / Space / gamepad A) skips it; a tap elsewhere does not, since the first
+-- tap often closes a Roblox message (the test-mode notice). Played once, when the player arrives.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -126,9 +127,18 @@ local function showLineups()
 	for t = 1, 2 do column(t, teams[t] or {}) end
 end
 
-local hint = text(gui, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -18), Size = UDim2.fromOffset(400, 22),
-	Text = if UserInputService.TouchEnabled then "Touche l’écran pour passer" else "Appuie sur une touche pour passer",
-	TextSize = 14, Font = Enum.Font.GothamBold, TextTransparency = 0.25 })
+local skip = Instance.new("TextButton")
+skip.AnchorPoint = Vector2.new(1, 1)
+skip.Position = UDim2.new(1, -24, 1, -24)
+skip.Size = UDim2.fromOffset(130, 44)
+skip.BackgroundColor3 = GOLD
+skip.Text = "Passer ▸"
+skip.TextColor3 = DARK
+skip.Font = Enum.Font.GothamBlack
+skip.TextSize = 18
+skip.Parent = gui
+Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 10)
+local hint = skip
 
 -- ---------- The flight round the stadium ----------
 local t0 = os.clock()
@@ -147,13 +157,11 @@ local function finish()
 	if hum then camera.CameraSubject = hum end
 end
 
+skip.Activated:Connect(finish)
 UserInputService.InputBegan:Connect(function(input)
 	if done then return end
-	local tt = input.UserInputType
-	if tt == Enum.UserInputType.Touch or tt == Enum.UserInputType.MouseButton1 or tt == Enum.UserInputType.Keyboard
-		or tt == Enum.UserInputType.Gamepad1 then
-		if os.clock() - t0 > 0.6 then finish() end
-	end
+	local k = input.KeyCode
+	if k == Enum.KeyCode.Return or k == Enum.KeyCode.Space or k == Enum.KeyCode.ButtonA then finish() end
 end)
 
 local shownBall, shownLineups = false, false
