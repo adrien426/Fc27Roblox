@@ -2,8 +2,8 @@
 -- L through ball, E tackle (with the ball: a skill move), Shift sprint, C TV camera. Gamepad and touch buttons
 -- do the same.
 -- Running is Roblox's own movement (ZQSD / WASD, stick or thumbstick).
--- Assisted play, like the web game: without touching anything for a moment, the computer plays for you (runs,
--- presses, tackles, passes, dribbles and shoots) until you move the stick or press a button again.
+-- Not touching anything for Config.IDLE_KICK seconds takes you out of the match (a computer player takes over):
+-- this script tells the server, every few seconds, that you are still playing.
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -34,10 +34,7 @@ end)
 local inMove = false
 local moveRev: Vector3? = nil
 
-local AUTO_AFTER = 1.5 -- seconds without input before assisted play
-local lastInput = os.clock()
-local auto = false
-local autoLabel: TextLabel? = nil
+local lastPing = 0
 
 local function body(): (Humanoid?, BasePart?)
 	local char = player.Character
@@ -61,7 +58,6 @@ local function fire(kind: string, power: number?)
 end
 
 local function press(kind: string)
-	lastInput = os.clock()
 	if FULL[kind] then
 		charging = { kind = kind, t0 = os.clock() }
 	elseif kind == "sprint" then
@@ -106,50 +102,13 @@ for _, b in BINDS do
 	end, false, Enum.ContextActionPriority.High.Value, b[2], b[3])
 end
 
--- "Jeu assisté" shown while the computer plays for you
-do
-	local g = Instance.new("ScreenGui")
-	g.Name = "FC27Auto"
-	g.ResetOnSpawn = false
-	g.Parent = player:WaitForChild("PlayerGui")
-	local t = Instance.new("TextLabel")
-	t.AnchorPoint = Vector2.new(0.5, 1)
-	t.Position = UDim2.new(0.5, 0, 1, -12)
-	t.Size = UDim2.fromOffset(170, 26)
-	t.BackgroundColor3 = Color3.fromRGB(14, 24, 18)
-	t.BackgroundTransparency = 0.25
-	t.Text = "Jeu assisté"
-	t.TextColor3 = Color3.fromRGB(242, 194, 48)
-	t.Font = Enum.Font.GothamBold
-	t.TextSize = 15
-	t.Visible = false
-	Instance.new("UICorner", t).CornerRadius = UDim.new(0, 8)
-	t.Parent = g
-	autoLabel = t
-end
-
--- Assisted play: runs after Roblox's controls each frame, so its movement wins while it is on
-RunService:BindToRenderStep("FC27Assisted", Enum.RenderPriority.Input.Value + 1, function()
-	local hum, root = body()
+-- Still playing: moving the stick tells the server (button presses already reach it as actions)
+RunService.Heartbeat:Connect(function()
+	local hum = body()
 	local mv = if controls then (controls:GetMoveVector() :: Vector3) else (if hum then hum.MoveDirection else Vector3.zero)
-	if mv.Magnitude > 0.1 or charging or sprintHeld then lastInput = os.clock() end
-	local want = hum ~= nil and os.clock() - lastInput > AUTO_AFTER
-	if want ~= auto then
-		auto = want
-		Action:FireServer("auto", if auto then 1 else 0)
-		if autoLabel then autoLabel.Visible = auto end
-	end
-	if not auto or inMove or not hum or not root then return end
-	local char = player.Character :: Model
-	local to = char:GetAttribute("AutoTo")
-	local speed = char:GetAttribute("AutoSpeed")
-	if typeof(to) ~= "Vector3" then return end
-	local d = Vector3.new((to :: Vector3).X - root.Position.X, 0, (to :: Vector3).Z - root.Position.Z)
-	if d.Magnitude > 0.6 and type(speed) == "number" and speed > 0 then
-		hum.WalkSpeed = math.min(speed, Config.SPRINT)
-		hum:Move(d.Unit)
-	else
-		hum:Move(Vector3.zero)
+	if (mv.Magnitude > 0.1 or sprintHeld or charging) and os.clock() - lastPing > 5 then
+		lastPing = os.clock()
+		Action:FireServer("active", 0, 0, 0)
 	end
 end)
 
@@ -226,9 +185,7 @@ RunService.RenderStepped:Connect(function(dt)
 		else
 			stamina = math.min(1, stamina + dt * (if moving then 0.135 else 0.18))
 		end
-		if not auto then
-			hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
-		end
+		hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
 		player:SetAttribute("Stamina", stamina)
 		player:SetAttribute("Sprinting", sprinting)
 	end
