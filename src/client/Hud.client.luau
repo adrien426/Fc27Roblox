@@ -32,7 +32,7 @@ end
 
 -- Scoreboard
 local board = Instance.new("Frame")
-board.Size = UDim2.fromOffset(300, 40)
+board.Size = UDim2.fromOffset(212, 40)
 board.Position = UDim2.new(0, 12, 0, 8)
 board.BackgroundColor3 = DARK
 board.BackgroundTransparency = 0.15
@@ -50,7 +50,17 @@ end
 teamTag(1, 8)
 local scoreText = label(board, { Size = UDim2.fromOffset(80, 30), Position = UDim2.fromOffset(66, 5), Text = "0 – 0", TextSize = 22, BackgroundTransparency = 0, BackgroundColor3 = Color3.new(1, 1, 1), TextColor3 = DARK })
 teamTag(2, 154)
-local clockText = label(board, { Size = UDim2.fromOffset(80, 40), Position = UDim2.fromOffset(214, 0), Text = "0’", TextSize = 20, TextColor3 = Color3.fromRGB(242, 194, 48) })
+-- Match clock in its own box, away from the score (next to BLE it read like the Blues' goals)
+local clockBox = Instance.new("Frame")
+clockBox.Size = UDim2.fromOffset(92, 40)
+clockBox.Position = UDim2.new(0, 12 + 212 + 8, 0, 8)
+clockBox.BackgroundColor3 = Color3.fromRGB(32, 36, 44)
+clockBox.BackgroundTransparency = 0.15
+clockBox.Parent = gui
+Instance.new("UICorner", clockBox).CornerRadius = UDim.new(0, 6)
+local clockText = label(clockBox, { Size = UDim2.fromOffset(92, 26), Position = UDim2.fromOffset(0, 1), Text = "⏱ 0’", TextSize = 18, TextColor3 = Color3.fromRGB(242, 194, 48) })
+local halfText = label(clockBox, { Size = UDim2.fromOffset(92, 12), Position = UDim2.fromOffset(0, 26), Text = "1re mi-temps", TextSize = 10,
+	Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(190, 196, 206) })
 
 -- Build version, small, bottom left
 label(gui, { Size = UDim2.fromOffset(120, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,
@@ -61,8 +71,10 @@ local function refresh()
 	local c = Net:GetAttribute("Clock") or 0
 	local half = Net:GetAttribute("Half") or 1
 	local base = if half == 1 then 45 else 90
-	clockText.Text = if c >= base then string.format("%d+%d’", base, c - base + 1) else string.format("%d’", c)
-	if Net:GetAttribute("Phase") == "break" then clockText.Text = "MT" end
+	clockText.Text = "⏱ " .. (if c >= base then string.format("%d+%d’", base, c - base + 1) else string.format("%d’", c))
+	halfText.Text = if half == 1 then "1re mi-temps" else "2e mi-temps"
+	if Net:GetAttribute("Phase") == "break" then clockText.Text = "⏱ MT"; halfText.Text = "mi-temps" end
+	if Net:GetAttribute("Phase") == "done" then halfText.Text = "terminé" end
 end
 for _, k in { "Score1", "Score2", "Clock", "Half", "Phase" } do Net:GetAttributeChangedSignal(k):Connect(refresh) end
 refresh()

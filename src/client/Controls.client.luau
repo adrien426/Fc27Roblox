@@ -1,6 +1,9 @@
 -- Controls, same keys as the web game: J pass, K shoot (hold for power), I lob (hold: further and higher),
--- L through ball, E tackle, Shift sprint, C TV camera. Gamepad and touch buttons do the same.
+-- L through ball, E tackle (with the ball: a skill move), Shift sprint, C TV camera. Gamepad and touch buttons
+-- do the same.
 -- Running is Roblox's own movement (ZQSD / WASD, stick or thumbstick).
+-- Not touching anything for Config.IDLE_KICK seconds takes you out of the match (a computer player takes over):
+-- this script tells the server, every few seconds, that you are still playing.
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -8,8 +11,10 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Dribbles = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Dribbles"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Action = Net:WaitForChild("Action") :: RemoteEvent
+local BallState = Net:WaitForChild("BallState") :: any
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -19,6 +24,17 @@ local charging: { kind: string, t0: number }? = nil
 local sprintHeld = false
 local stamina = 1
 local tvCam = false
+local haveBall = false
+
+-- Roblox's own movement controls, switched off while a skill move moves the player
+local controls: any = nil
+pcall(function()
+	controls = (require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")) :: any):GetControls()
+end)
+local inMove = false
+local moveRev: Vector3? = nil
+
+local lastPing = 0
 
 local function body(): (Humanoid?, BasePart?)
 	local char = player.Character
@@ -86,6 +102,52 @@ for _, b in BINDS do
 	end, false, Enum.ContextActionPriority.High.Value, b[2], b[3])
 end
 
+-- Skill move: the move sets the speed and direction and the body keeps facing where it was going. This runs right
+-- after Roblox's own controls each frame and overrides their movement while the move lasts; the controls are never
+-- switched off, so a stick still held at the end of the move carries straight on.
+RunService:BindToRenderStep("FC27SkillMove", Enum.RenderPriority.Input.Value + 1, function()
+	local hum, root = body()
+	if not hum or not root then return end
+	local char = player.Character :: Model
+	local key = char:GetAttribute("Drib")
+	local at = char:GetAttribute("DribAt")
+	local m = if type(key) == "string" then Dribbles.byKey[key] else nil
+	local k = if m and type(at) == "number" then (workspace:GetServerTimeNow() - at) / m.dur else 2
+	if m and k >= 0 and k < 1 then
+		local F = char:GetAttribute("DribF") :: Vector3
+		local S = char:GetAttribute("DribS") :: Vector3
+		local v0 = (char:GetAttribute("DribV0") :: number?) or 0
+		inMove = true
+		local fv, sv = m.v(k)
+		if not m.reverse then fv = math.max(fv, v0 * 0.75) end
+		local v = F * fv + S * sv
+		hum.AutoRotate = false
+		local p = root.Position
+		root.CFrame = CFrame.lookAt(p, p + F)
+		hum.WalkSpeed = v.Magnitude * Config.M
+		hum:Move(if v.Magnitude > 0.05 then v.Unit else Vector3.zero)
+		moveRev = if m.reverse then -F else nil
+	elseif inMove then
+		inMove = false
+		hum.AutoRotate = true
+		if moveRev then
+			local p = root.Position
+			root.CFrame = CFrame.lookAt(p, p + moveRev)
+			moveRev = nil
+		end
+	end
+end)
+
+-- Still playing: moving the stick tells the server (button presses already reach it as actions)
+RunService.Heartbeat:Connect(function()
+	local hum = body()
+	local mv = if controls then (controls:GetMoveVector() :: Vector3) else (if hum then hum.MoveDirection else Vector3.zero)
+	if (mv.Magnitude > 0.1 or sprintHeld or charging) and os.clock() - lastPing > 5 then
+		lastPing = os.clock()
+		Action:FireServer("active", 0, 0, 0)
+	end
+end)
+
 -- Touch buttons, left of Roblox's jump button
 if UserInputService.TouchEnabled then
 	local gui = Instance.new("ScreenGui")
@@ -122,12 +184,18 @@ if UserInputService.TouchEnabled then
 		b.Parent = gui
 	end
 	local dark = Color3.fromRGB(19, 36, 26)
+	-- With the ball, the tackle button does a skill move
+	BallState.OnClientEvent:Connect(function(_s: any, o: any)
+		haveBall = o ~= nil and o == player.Character
+		local b = gui:FindFirstChild("tackle")
+		if b and b:IsA("TextButton") then b.Text = if haveBall then "Dribble" else "Tacle" end
+	end)
 	button("shoot", "Tir", 92, UDim2.new(1, -150, 1, -175), Color3.fromRGB(242, 194, 48), dark)
 	button("pass", "Passe", 76, UDim2.new(1, -250, 1, -110), Color3.fromRGB(244, 247, 240), dark)
 	button("lob", "Lob", 64, UDim2.new(1, -262, 1, -205), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
 	button("tackle", "Tacle", 64, UDim2.new(1, -165, 1, -275), Color3.fromRGB(255, 107, 87), Color3.new(1, 1, 1))
 	button("sprint", "Sprint", 58, UDim2.new(1, -60, 1, -260), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
-	button("camera", "🎥", 44, UDim2.new(1, -40, 0, 90), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
+	button("camera", "🎥", 44, UDim2.new(0.5, 0, 0, 30), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
 end
 
 RunService.RenderStepped:Connect(function(dt)
@@ -153,7 +221,9 @@ RunService.RenderStepped:Connect(function(dt)
 		else
 			stamina = math.min(1, stamina + dt * (if moving then 0.135 else 0.18))
 		end
-		hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
+		if not inMove then
+			hum.WalkSpeed = if stunned then Config.STUN_SPEED elseif sprinting then Config.SPRINT else Config.WALK
+		end
 		player:SetAttribute("Stamina", stamina)
 		player:SetAttribute("Sprinting", sprinting)
 	end
