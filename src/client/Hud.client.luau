@@ -84,9 +84,11 @@ local versionText = label(gui, { Size = UDim2.new(1, -12, 0, 14), Position = UDi
 	Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.35 })
 local function showDebug()
 	local d = Net:GetAttribute("Debug")
-	versionText.Text = "v " .. Version .. (if type(d) == "string" then "   ·   " .. d else "")
+	local a = player:GetAttribute("Audio")
+	versionText.Text = "v " .. Version .. (if type(d) == "string" then "   ·   " .. d else "") .. (if type(a) == "string" then "   ·   " .. a else "")
 end
 Net:GetAttributeChangedSignal("Debug"):Connect(showDebug)
+player:GetAttributeChangedSignal("Audio"):Connect(showDebug)
 showDebug()
 
 local function refresh()

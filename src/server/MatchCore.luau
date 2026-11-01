@@ -82,7 +82,9 @@ end
 
 -- A line of commentary at the bottom of the screen (client/Hud), and the crowd getting louder for a moment
 -- (client/Sounds): swell 0..1
-local function comment(text: string, swell: number?)
+-- speak: the commentator also says it out loud (client/Sounds, text-to-speech in each player's language)
+local function comment(text: string, swell: number?, speak: boolean?)
+	Net:SetAttribute("CommentSpeak", speak == true)
 	Net:SetAttribute("Comment", text)
 	Net:SetAttribute("CommentAt", workspace:GetServerTimeNow())
 	if swell and swell > 0 then
@@ -305,7 +307,7 @@ end
 
 -- Ground pass into the receiver's run, weighted so it reaches him at a comfortable speed
 local function passTo(a: Actor, m: Actor)
-	if m.player then comment(`{a.name} cherche {m.name}`) elseif rng:NextNumber() < 0.3 then comment(`Passe de {a.name} pour {m.name}`) end
+	if m.player then comment(`{a.name} cherche {m.name}`, nil, true) elseif rng:NextNumber() < 0.3 then comment(`Passe de {a.name} pour {m.name}`) end
 	local px, py = posOf(a)
 	local mx, my = posOf(m)
 	local mvx, mvy = velOf(m)
@@ -400,7 +402,7 @@ local function doShoot(a: Actor, dx: number, dy: number, power: number)
 	kickBall(a, math.cos(ang) * vh, math.sin(ang) * vh, vz)
 	shotBy = a.team
 	say("Tir !", a.name, 0.8)
-	comment(`Frappe de {a.name} !`, 0.3)
+	comment(`Frappe de {a.name} !`, 0.3, a.player ~= nil)
 end
 
 -- Lob: the longer it was held, the further and higher. A team-mate running into the landing spot gets it
@@ -671,7 +673,7 @@ local function dribbleOutcome(a: Actor)
 		end
 	end
 	if q == 3 and a.player then say(`{m.name} parfait !`, a.name, 1.4) end
-	if q == 3 then comment(`{m.name} parfait de {a.name} !`, 0.4) elseif q == 2 and rng:NextNumber() < 0.5 then comment(`Joli geste de {a.name} : {string.lower(m.name)}.`, 0.15) end
+	if q == 3 then comment(`{m.name} parfait de {a.name} !`, 0.4, true) elseif q == 2 and rng:NextNumber() < 0.5 then comment(`Joli geste de {a.name} : {string.lower(m.name)}.`, 0.15) end
 end
 
 -- Starts a skill move for the player who has the ball. (ix, iy): where his stick points, to choose the side
@@ -838,7 +840,7 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 	end
 	if card then stats.cards += 1 end
 	comment(if card == "red" then `Carton rouge ! {f.name} est expulsé.` elseif card == "yellow" then `Carton jaune pour {f.name}.`
-		else `Faute de {f.name} sur {v.name}.`, if card then 0.4 else 0.15)
+		else `Faute de {f.name} sur {v.name}.`, if card then 0.4 else 0.15, card ~= nil or inBox)
 	if inBox then
 		stats.penalties += 1
 		say("Penalty !", sub, 2.2)
@@ -876,6 +878,7 @@ local function kickoff(t: number)
 	if tk then place(tk, L / 2 - dir[t] * 0.8, W / 2) end
 	setPiece("kickoff", t, L / 2, W / 2, tk)
 	say("Coup d’envoi", Config.TEAMS[t].name, 1.5)
+	comment(`Coup d’envoi pour les {Config.TEAMS[t].name} !`, 0.2, true)
 end
 
 local function goalFor(t: number)
@@ -894,7 +897,7 @@ local function goalFor(t: number)
 	owner, held, shotBy = nil, false, nil
 	publish()
 	say("BUT !", Config.TEAMS[t].name .. " · " .. scorer, 3.5)
-	comment(if scorer == "contre son camp" then `But contre son camp ! Les {Config.TEAMS[t].name} mènent la danse.` else `BUT de {scorer} pour les {Config.TEAMS[t].name} !`, 1)
+	comment(if scorer == "contre son camp" then `But contre son camp ! Les {Config.TEAMS[t].name} mènent la danse.` else `BUT de {scorer} pour les {Config.TEAMS[t].name} !`, 1, true)
 	Net:SetAttribute("LastGoalTeam", t)
 	Net:SetAttribute("GoalAt", workspace:GetServerTimeNow())
 	if lastTouch and lastTouch.team == t then act(lastTouch, "siuu") end
@@ -985,7 +988,7 @@ local function tryControl()
 					held = true
 					a.holdT = 1.3
 					act(a, "gkCatch", 0.5)
-					if shotBy then say("Arrêt !", a.name, 1); comment(`Arrêt de {a.name} !`, 0.35) end
+					if shotBy then say("Arrêt !", a.name, 1); comment(`Arrêt de {a.name} !`, 0.35, true) end
 				else
 					-- Beaten: he only grazes it, the ball goes on (it used to bounce back out, so shots almost never
 					-- went in)
