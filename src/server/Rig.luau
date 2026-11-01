@@ -161,7 +161,7 @@ local function hideAvatar(model: Model, body: Model)
 end
 
 -- Welds the web game's footballer on this body, in the team kit. Returns false when the model is not loaded.
-function Rig.addBody(model: Model, teamIdx: number, num: number, rng: Random): boolean
+local function addBody(model: Model, teamIdx: number, num: number, rng: Random): boolean
 	local tpl = Assets.player
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if not tpl or not root or not root:IsA("BasePart") then return false end
@@ -220,6 +220,16 @@ function Rig.addBody(model: Model, teamIdx: number, num: number, rng: Random): b
 	hideAvatar(model, body)
 	CollectionService:AddTag(body, "FC27Body")
 	return true
+end
+
+-- Never throws: if the footballer cannot be put on, the player keeps the standard avatar
+function Rig.addBody(model: Model, teamIdx: number, num: number, rng: Random): boolean
+	local ok, res = pcall(addBody, model, teamIdx, num, rng)
+	if ok then return res end
+	warn(`[FC27] Could not put the footballer model on {model.Name}: {res}`)
+	local body = model:FindFirstChild("Body")
+	if body then body:Destroy() end
+	return false
 end
 
 -- Animation tracks per body, loaded on first use

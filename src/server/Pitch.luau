@@ -257,9 +257,17 @@ function Pitch.build(stadium: Model?)
 	goal(root, 0)
 	goal(root, L)
 
+	spawns(root)
 	if stadium then
-		placeStadium(root, stadium)
-	else
+		local ok, err = pcall(placeStadium, root, stadium)
+		if not ok then
+			warn(`[FC27] Could not place the stadium model: {err}`)
+			local bad = root:FindFirstChild(stadium.Name)
+			if bad then bad:Destroy() end
+			stadium = nil
+		end
+	end
+	if not stadium then
 		local stands = Instance.new("Folder")
 		stands.Name = "Stands"
 		stands.Parent = root
@@ -270,7 +278,6 @@ function Pitch.build(stadium: Model?)
 		boards(root)
 		floodlights(root)
 	end
-	spawns(root)
 
 	Lighting.ClockTime = 16.5
 	Lighting.Brightness = 2.2
