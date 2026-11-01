@@ -16,6 +16,9 @@ local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local M = Config.M
 
+-- It plays when the player goes onto the pitch from the locker room (client/Lobby), once per visit to the server
+while player:GetAttribute("InMatch") ~= true do player:GetAttributeChangedSignal("InMatch"):Wait() end
+
 local DURATION = 10
 local BALL_NAMES = {
 	classique = "Classique", etoiles = "Étoiles", jabu = "Jabulani", brazu = "Brazuca", euro = "Euro",

@@ -292,4 +292,76 @@ function Pitch.build(stadium: Model?)
 	return root
 end
 
+-- ---------- Locker room ----------
+-- Where players arrive, high above the stadium: a lit room with the spawn at one end and, straight ahead, a glowing
+-- ring marked MATCH. Walking into the ring opens the team and position picker (client/Lobby).
+Pitch.LOBBY = Vector3.new(0, 900, 0)
+Pitch.RING_RADIUS = 9 -- studs
+
+function Pitch.buildLobby(): Folder
+	local root = Instance.new("Folder")
+	root.Name = "Lobby"
+	root.Parent = workspace
+	local o = Pitch.LOBBY
+	local LEN, WID, HEI = 140, 70, 34
+	local floorColor = Color3.fromRGB(32, 40, 52)
+	part(root, { Name = "Floor", Size = Vector3.new(WID, 2, LEN), CFrame = CFrame.new(o - Vector3.new(0, 1, 0)), Color = floorColor, Material = Enum.Material.Slate })
+	part(root, { Name = "Ceiling", Size = Vector3.new(WID, 2, LEN), CFrame = CFrame.new(o + Vector3.new(0, HEI, 0)), Color = Color3.fromRGB(20, 24, 30) })
+	for _, side in { -1, 1 } do
+		part(root, { Name = "Wall", Size = Vector3.new(2, HEI, LEN), CFrame = CFrame.new(o + Vector3.new(side * WID / 2, HEI / 2, 0)), Color = Color3.fromRGB(150, 30, 45) })
+		part(root, { Name = "Wall", Size = Vector3.new(WID, HEI, 2), CFrame = CFrame.new(o + Vector3.new(0, HEI / 2, side * LEN / 2)), Color = Color3.fromRGB(28, 70, 150) })
+		-- Benches along the side walls
+		part(root, { Name = "Bench", Size = Vector3.new(4, 2, LEN - 30), CFrame = CFrame.new(o + Vector3.new(side * (WID / 2 - 4), 1, 0)), Color = Color3.fromRGB(200, 200, 205), Material = Enum.Material.Wood })
+	end
+	-- A strip of grass in the middle, leading from the spawn to the ring
+	part(root, { Name = "Runway", Size = Vector3.new(16, 0.2, LEN - 20), CFrame = CFrame.new(o + Vector3.new(0, 0.1, 0)), Color = Color3.fromRGB(56, 136, 58), Material = Enum.Material.Grass, CanCollide = false })
+	for i = -2, 2 do
+		local lamp = part(root, { Name = "Lamp", Size = Vector3.new(10, 0.5, 4), CFrame = CFrame.new(o + Vector3.new(0, HEI - 1.5, i * 26)), Color = Color3.new(1, 1, 0.95), Material = Enum.Material.Neon })
+		local l = Instance.new("PointLight")
+		l.Range = 40
+		l.Brightness = 1.6
+		l.Parent = lamp
+	end
+
+	-- The spawn at one end, facing the ring
+	local spawnPos = o + Vector3.new(0, 0.5, LEN / 2 - 12)
+	local ringPos = o + Vector3.new(0, 0.15, -LEN / 2 + 26)
+	local sp = Instance.new("SpawnLocation")
+	sp.Name = "LobbySpawn"
+	sp.Anchored = true
+	sp.Neutral = true
+	sp.AllowTeamChangeOnTouch = false
+	sp.Duration = 0
+	sp.Size = Vector3.new(10, 1, 10)
+	sp.Transparency = 0.5
+	sp.Color = Color3.fromRGB(242, 194, 48)
+	sp.CFrame = CFrame.lookAt(spawnPos, Vector3.new(ringPos.X, spawnPos.Y, ringPos.Z))
+	sp.Parent = root
+
+	-- The ring: a glowing disc and a sign above it
+	local ring = part(root, { Name = "Ring", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, Pitch.RING_RADIUS * 2, Pitch.RING_RADIUS * 2),
+		CFrame = CFrame.new(ringPos) * CFrame.Angles(0, 0, math.pi / 2), Color = Color3.fromRGB(242, 194, 48), Material = Enum.Material.Neon,
+		CanCollide = false, Transparency = 0.25 })
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(242, 194, 48)
+	glow.Range = 30
+	glow.Brightness = 3
+	glow.Parent = ring
+	local sign = part(root, { Name = "Sign", Size = Vector3.new(30, 8, 1), CFrame = CFrame.new(ringPos + Vector3.new(0, 16, -6)), Color = Color3.fromRGB(14, 24, 18) })
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 20
+	gui.Parent = sign
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Text = "MATCH ▼  choisis ton équipe"
+	t.TextScaled = true
+	t.Font = Enum.Font.GothamBlack
+	t.TextColor3 = Color3.fromRGB(242, 194, 48)
+	t.Parent = gui
+	return root
+end
+
 return Pitch
