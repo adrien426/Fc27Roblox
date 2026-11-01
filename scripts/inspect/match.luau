@@ -1,14 +1,12 @@
 -- Plays a match between computer players on a real server for about 3 minutes (half a match) and prints every goal
 -- with what led to it: where the ball was, who touched it last, whether it was carried or kicked.
--- Run with scripts/run-luau.mjs (the place's own scripts run; the match server exposes ServerStorage.FC27Test).
--- In an Open Cloud session the place's scripts do not start by themselves: start the match script
+-- Run with scripts/run-luau.mjs: it loads the match module (server/MatchCore), which exposes ServerStorage.FC27Test.
+-- In an Open Cloud session the place's scripts do not run: load the match module (what Match.server does)
 local ServerStorage = game:GetService("ServerStorage")
 local hook = ServerStorage:FindFirstChild("FC27Test") :: BindableFunction?
 if not hook then
-	local match = game:GetService("ServerScriptService"):WaitForChild("Server"):WaitForChild("Match") :: Script
-	match.Enabled = false
-	match.Enabled = true
-	hook = ServerStorage:WaitForChild("FC27Test", 60) :: BindableFunction?
+	require(game:GetService("ServerScriptService"):WaitForChild("Server"):WaitForChild("MatchCore"))
+	hook = ServerStorage:WaitForChild("FC27Test", 30) :: BindableFunction?
 end
 assert(hook, "no test hook: deploy first")
 hook:Invoke("start")
