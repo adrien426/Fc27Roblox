@@ -1647,6 +1647,22 @@ RunService.Heartbeat:Connect(function(dt)
 		if a.player then a.diveT = math.max(0, a.diveT - dt) end
 	end
 	separate()
+	-- A human keeper's placement help (client/Controls): where a shot at his goal will cross the line, on his
+	-- character (AimZ, world Z; AimAt, server time), so that his machine can shift him a little towards it
+	if shotBy then
+		for _, a in actors do
+			if a.role ~= "GK" or not a.player or not a.model or shotBy == a.team then continue end
+			local gx = ownGoalX(a.team)
+			if (gx - ball.x) * ball.vx <= 0 or math.abs(ball.vx) < 3 then continue end
+			local t = (gx + dir[a.team] * 0.6 - ball.x) / ball.vx
+			local yc = ball.y + ball.vy * t
+			if t > 0 and t < 1.5 and math.abs(yc - W / 2) < GH + 2 then
+				local m = a.model :: Model
+				m:SetAttribute("AimZ", toWorld(0, math.clamp(yc, W / 2 - GH, W / 2 + GH), 0).Z)
+				m:SetAttribute("AimAt", workspace:GetServerTimeNow())
+			end
+		end
+	end
 	-- Possession, and a human keeper holding the ball more than 6 s plays it out
 	if owner and phase == "play" then
 		local o = owner :: Actor

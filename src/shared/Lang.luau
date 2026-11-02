@@ -41,6 +41,8 @@ local S: { [string]: { string } } = {
 	["btn.dribble"] = { "Dribble", "Dribble", "Regate", "Dribbling", "Dribbling", "Drible" },
 	["btn.dive"] = { "Plonger", "Dive", "Estirada", "Hechten", "Tuffo", "Mergulho" },
 	["btn.clear"] = { "Dégager", "Clear", "Despejar", "Klären", "Rinvio", "Afastar" },
+	["gk.help.on"] = { "🧤 Aide : oui", "🧤 Help: on", "🧤 Ayuda: sí", "🧤 Hilfe: an", "🧤 Aiuto: sì", "🧤 Ajuda: sim" },
+	["gk.help.off"] = { "🧤 Aide : non", "🧤 Help: off", "🧤 Ayuda: no", "🧤 Hilfe: aus", "🧤 Aiuto: no", "🧤 Ajuda: não" },
 	["btn.skip"] = { "Passer  »", "Skip  »", "Saltar  »", "Weiter  »", "Salta  »", "Pular  »" },
 
 	-- Restarts
