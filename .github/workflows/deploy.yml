@@ -118,6 +118,9 @@ jobs:
       - name: Check the Luau code and build the place
         run: |
           echo "return \"${GITHUB_SHA::7} · $(date -u '+%d/%m %H:%M')\"" > src/shared/Version.luau
+          # main = the real game (no debug line on screen), test = the test game
+          env=$([ "$GITHUB_REF_NAME" = main ] && echo prod || echo test)
+          printf -- '-- Written by the deploy workflow (see the file in the repository)\nreturn "%s"\n' "$env" > src/shared/Env.luau
           tools/rojo sourcemap default.project.json -o sourcemap.json
           tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
           tools/rojo build default.project.json -o Fc27.rbxlx

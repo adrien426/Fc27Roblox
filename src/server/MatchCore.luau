@@ -1206,6 +1206,10 @@ local function botWithBall(a: Actor, dt: number)
 			doShoot(a, gdx, gdy, rng:NextNumber(0.55, 0.85))
 			return
 		end
+		-- Computer players play for the real players: a free human team-mate gets the ball first, even when nobody
+		-- presses the carrier (otherwise a computer player only passes under pressure, and a human waits for nothing)
+		local h = bestPass(a, nil, nil)
+		if h and h.player and rng:NextNumber() < 0.55 then passTo(a, h); return end
 		-- A defender right in front: sometimes a skill move instead of a pass
 		if pressure < 3 and rng:NextNumber() < 0.3 then
 			local o = nearestOpp(a)
