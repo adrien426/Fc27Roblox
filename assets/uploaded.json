@@ -40,5 +40,47 @@
     "sha256": "8dbb8d13aadbbf40ab7e48972222c7db7bfe9d5aef7a314df8a22ebf62332929",
     "file": "assets/source/sounds/roar.mp3",
     "type": "Audio"
+  },
+  "art.celebrations": {
+    "id": 126690707640780,
+    "sha256": "3dbeae9157e8cb9989a54dff9ab86195ab6d0a7d386a818cbbb12233212330f1",
+    "file": "assets/art/celebrations.png",
+    "type": "Decal"
+  },
+  "art.style": {
+    "id": 138281138776883,
+    "sha256": "d30190fb937ff69d679647db5014b73416e39db02988cbab4213ff8acd045237",
+    "file": "assets/art/style.png",
+    "type": "Decal"
+  },
+  "art.vip": {
+    "id": 81669267564792,
+    "sha256": "d026e062ee726cef8f063ae8b3ada6d428c458126c5cc50ab731fec62d7a5881",
+    "file": "assets/art/vip.png",
+    "type": "Decal"
+  },
+  "art.trail": {
+    "id": 79077480470837,
+    "sha256": "81af81dd1535b66bf713fac866941c5244e0efb1452ab2ba5c6d1b70fdadd792",
+    "file": "assets/art/trail.png",
+    "type": "Decal"
+  },
+  "art.coins500": {
+    "id": 77591651434819,
+    "sha256": "254b9390a4ecec1f09706a892d7eb5abb963f9a5391d09b1f588ab9827abfa2a",
+    "file": "assets/art/coins500.png",
+    "type": "Decal"
+  },
+  "art.coins1500": {
+    "id": 125450251810823,
+    "sha256": "382dd439ccc35676dac28d67fc71ce37e508aba19b5cfd221123ccad8413763f",
+    "file": "assets/art/coins1500.png",
+    "type": "Decal"
+  },
+  "art.coins5000": {
+    "id": 129387775565413,
+    "sha256": "3c5847b1fded705fd3bbf58261129752da534fe46611a0f12328b2d8e4d964cb",
+    "file": "assets/art/coins5000.png",
+    "type": "Decal"
   }
 }
