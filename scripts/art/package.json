@@ -1,0 +1,7 @@
+{
+  "name": "fc27-art",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node shoot.mjs" },
+  "dependencies": { "three": "0.170.0" }
+}

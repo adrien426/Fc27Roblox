@@ -12,10 +12,10 @@ export type Item = {
 }
 
 local ITEMS: { Item } = {
-	{ id = "celebrations", name = "Célébrations", desc = "Ta célébration après chaque but : tout le stade la voit.",
+	{ id = "celebrations", name = "Célébrations", desc = "Après chaque but, ton joueur fait sa fête : Siuu, danse, victoire ou bravo. Tout le stade la voit !",
 		robux = 99, coins = 1500, slot = "celebration",
 		choices = { { id = "siuu", name = "Siuu" }, { id = "dance", name = "Danse" }, { id = "victory", name = "Victoire" }, { id = "clap", name = "Applaudir" } } },
-	{ id = "style", name = "Crampons et maillots", desc = "Crampons de couleur et maillots en édition spéciale.",
+	{ id = "style", name = "Crampons et maillots", desc = "Des crampons de couleur et un maillot doré ou noir. Ta couleur d’équipe reste, pour qu’on te reconnaisse.",
 		robux = 149, coins = 2000, slot = "boots",
 		choices = {
 			{ id = "gold", name = "Dorés", color = Color3.fromRGB(230, 180, 40) },
@@ -24,9 +24,9 @@ local ITEMS: { Item } = {
 			{ id = "pink", name = "Roses", color = Color3.fromRGB(235, 60, 140) },
 			{ id = "cyan", name = "Cyan", color = Color3.fromRGB(40, 200, 230) },
 		} },
-	{ id = "vip", name = "Pass VIP", desc = "Nom en doré ★ sur le terrain et accès au coin VIP du vestiaire.",
+	{ id = "vip", name = "Pass VIP", desc = "Ton nom s’écrit en doré avec une étoile ★ au-dessus de ton joueur, et tu entres dans le coin VIP du vestiaire.",
 		robux = 299, coins = 5000 },
-	{ id = "trail", name = "Effet de tir", desc = "Une traînée derrière le ballon sur tes frappes.",
+	{ id = "trail", name = "Effet de tir", desc = "Quand tu tires, le ballon laisse une traînée derrière lui : feu, étoiles ou glace.",
 		robux = 149, coins = 2000, slot = "trail",
 		choices = {
 			{ id = "fire", name = "Feu", color = Color3.fromRGB(255, 120, 30) },
