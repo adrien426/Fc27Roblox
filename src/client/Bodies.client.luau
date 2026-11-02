@@ -223,13 +223,17 @@ end
 
 local function choose(st: Body, now: number, dt: number): (string, number)
 	local m = st.model
+	-- Replay doubles (client/Replay): played slower, moved by hand with their recorded speed
+	local slow = m:GetAttribute("Slow")
+	local k = if type(slow) == "number" and slow > 0 then slow else 1
+	dt /= k
 	-- 1. An action from the server
 	local act = m:GetAttribute("Act")
 	local at = m:GetAttribute("ActAt")
 	if typeof(act) == "string" and typeof(at) == "number" then
 		local w = ACTS[act]
 		if w then
-			local el = now - at
+			local el = (now - at) / k
 			local d = m:GetAttribute("ActDur")
 			local dur = if typeof(d) == "number" and d > 0 then d else w.to - w.from
 			if el >= 0 and el < dur then
@@ -247,7 +251,8 @@ local function choose(st: Body, now: number, dt: number): (string, number)
 		if Net:GetAttribute("Phase") == "set" and Net:GetAttribute("SetKind") == "throw" then return "throwIn", 1.0 end
 	end
 	-- 3. Goal and full time
-	local phase = Net:GetAttribute("Phase")
+	-- (not for replay doubles: they replay the run-up to the goal, which happened before the celebrations)
+	local phase = if m:GetAttribute("Replay") then nil else Net:GetAttribute("Phase")
 	local team = m:GetAttribute("Team")
 	if phase == "goal" and typeof(team) == "number" then
 		local g = Net:GetAttribute("LastGoalTeam")
@@ -271,7 +276,8 @@ local function choose(st: Body, now: number, dt: number): (string, number)
 	local isGK = m:GetAttribute("Role") == "GK"
 	if not st.root then return loop(st, "idleN", dt, 1) end
 	local root = st.root :: BasePart
-	local v = root.AssemblyLinearVelocity
+	local rv = m:GetAttribute("ReplayVel")
+	local v = if typeof(rv) == "Vector3" then rv else root.AssemblyLinearVelocity
 	local flat = Vector3.new(v.X, 0, v.Z)
 	local speed = flat.Magnitude / M
 	if speed < 0.4 then

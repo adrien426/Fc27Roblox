@@ -398,6 +398,35 @@ function Pitch.buildLobby(): Folder
 		part(root, { Name = "Post", Size = Vector3.new(0.6, 4, 0.6), CFrame = CFrame.new(vipPos + Vector3.new(-10, 2, z)), Color = Color3.fromRGB(230, 190, 60), Material = Enum.Material.Metal })
 	end
 	part(root, { Name = "Rope", Size = Vector3.new(0.3, 0.3, 34), CFrame = CFrame.new(vipPos + Vector3.new(-10, 3.4, 0)), Color = Color3.fromRGB(150, 20, 30), CanCollide = false })
+	-- All-time scorers board on the left wall (filled by MatchCore every minute)
+	local board = part(root, { Name = "ScorersBoard", Size = Vector3.new(1, 18, 24), CFrame = CFrame.new(o + Vector3.new(-WID / 2 + 1.6, 12, -12)), Color = Color3.fromRGB(14, 24, 18) })
+	local bg = Instance.new("SurfaceGui")
+	bg.Name = "Board"
+	bg.Face = Enum.NormalId.Right
+	bg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	bg.PixelsPerStud = 20
+	bg.Parent = board
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0.14, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "⚽ MEILLEURS BUTEURS"
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBlack
+	title.TextColor3 = Color3.fromRGB(242, 194, 48)
+	title.Parent = bg
+	local rows = Instance.new("TextLabel")
+	rows.Name = "Rows"
+	rows.Size = UDim2.new(0.92, 0, 0.82, 0)
+	rows.Position = UDim2.new(0.04, 0, 0.16, 0)
+	rows.BackgroundTransparency = 1
+	rows.Text = "Pas encore de but."
+	rows.TextScaled = true
+	rows.TextXAlignment = Enum.TextXAlignment.Left
+	rows.TextYAlignment = Enum.TextYAlignment.Top
+	rows.Font = Enum.Font.GothamBold
+	rows.TextColor3 = Color3.new(1, 1, 1)
+	rows.Parent = bg
+
 	local vipSign = part(root, { Name = "VipSign", Size = Vector3.new(1, 5, 14), CFrame = CFrame.new(vipPos + Vector3.new(9.5, 10, 0)), Color = Color3.fromRGB(14, 24, 18) })
 	signText(vipSign, Enum.NormalId.Left, "★ VIP", Color3.fromRGB(242, 194, 48))
 	return root

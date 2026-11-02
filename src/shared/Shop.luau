@@ -24,7 +24,7 @@ local ITEMS: { Item } = {
 			{ id = "pink", name = "Roses", color = Color3.fromRGB(235, 60, 140) },
 			{ id = "cyan", name = "Cyan", color = Color3.fromRGB(40, 200, 230) },
 		} },
-	{ id = "vip", name = "Pass VIP", desc = "Nom en doré ★, coin VIP au vestiaire, poste de gardien débloqué.",
+	{ id = "vip", name = "Pass VIP", desc = "Nom en doré ★ sur le terrain et accès au coin VIP du vestiaire.",
 		robux = 299, coins = 5000 },
 	{ id = "trail", name = "Effet de tir", desc = "Une traînée derrière le ballon sur tes frappes.",
 		robux = 149, coins = 2000, slot = "trail",

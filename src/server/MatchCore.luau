@@ -66,6 +66,21 @@ local score = { 0, 0 }
 -- Every goal with what led to it (read by the test hook at the bottom, for scripts/inspect/match.luau)
 local goalLog: { { [string]: any } } = {}
 local stats = { fouls = 0, penalties = 0, cards = 0, shots = 0 }
+-- This match's statistics, per team and per player (end-of-match screen, client/Stats)
+type TeamStats = { shots: number, passes: number, tackles: number, fouls: number, cards: number, offsides: number, poss: number }
+local function freshStats(): { teams: { TeamStats }, players: { [string]: any }, scorers: { any } }
+	local function t(): TeamStats return { shots = 0, passes = 0, tackles = 0, fouls = 0, cards = 0, offsides = 0, poss = 0 } end
+	return { teams = { t(), t() }, players = {}, scorers = {} }
+end
+local ms = freshStats()
+local function pstat(a: any, key: string)
+	local p = ms.players[a.name]
+	if not p then
+		p = { name = a.name, team = a.team, num = a.num, human = a.player ~= nil, goals = 0, passes = 0, tackles = 0, shots = 0 }
+		ms.players[a.name] = p
+	end
+	p[key] += 1
+end
 local boundsHow = "free" -- "free": ball in flight / rolling, "carried": at someone's feet
 local dir = { 1, -1 } -- team 1 attacks towards x = 105 in the first half
 local clock, half = 0, 1
@@ -230,7 +245,33 @@ local function gauss(): number
 	return math.sqrt(-2 * math.log(math.max(1e-9, rng:NextNumber()))) * math.cos(2 * math.pi * rng:NextNumber())
 end
 
+-- Offside, as in the web game: when a player plays the ball forward, any team-mate standing in the opponents' half,
+-- ahead of the ball and beyond the second-last opponent is marked; if one of them is the next to touch it, offside
+-- (a free kick for the defenders). Not on throw-ins, corners and goal kicks.
+local offsideSet: { [Actor]: boolean }? = nil
+local function markOffside(a: Actor)
+	offsideSet = nil
+	local d = dir[a.team]
+	local ax = posOf(a)
+	local line: { number } = {}
+	for _, o in actors do
+		if o.team ~= a.team and o.root then table.insert(line, (posOf(o)) * d) end
+	end
+	table.sort(line, function(p, q) return p > q end)
+	local second = line[2] or L * d
+	for _, m in actors do
+		if m.team ~= a.team or m == a or not m.root then continue end
+		local mx = posOf(m)
+		if (mx - L / 2) * d > 0 and (mx - ax) * d > 0.5 and mx * d > second + 0.3 then
+			offsideSet = offsideSet or {}
+			;(offsideSet :: any)[m] = true
+		end
+	end
+end
+
 local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: number?, clip: string?)
+	local restart = phase == "set" and (setKindNow == "throw" or setKindNow == "corner" or setKindNow == "goalkick")
+	if restart then offsideSet = nil else markOffside(a) end
 	a.kicked = true -- his own shot or pass: not a lost ball
 	local pl = a.player
 	if pl and math.sqrt(vx * vx + vy * vy) > 14 and Economy.owns(pl, "trail") then
@@ -255,6 +296,7 @@ local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: numb
 end
 
 local function giveBall(a: Actor)
+	offsideSet = nil
 	owner = a
 	held = false
 	lastTouch = a
@@ -385,6 +427,8 @@ local function doThrough(a: Actor, dx: number, dy: number)
 end
 
 local function doShoot(a: Actor, dx: number, dy: number, power: number)
+	ms.teams[a.team].shots += 1
+	pstat(a, "shots")
 	local px, py = posOf(a)
 	local gx = oppGoalX(a.team)
 	local gd = dist2(px, py, gx, W / 2)
@@ -517,6 +561,8 @@ local function doTackle(a: Actor)
 		a.cool = 0.1
 		say("Tacle réussi !", a.name, 0.9)
 		if a.player then Economy.earn(a.player, "tackle") end
+		ms.teams[a.team].tackles += 1
+		pstat(a, "tackles")
 		comment(`Tacle de {a.name}, il récupère le ballon.`, 0.2)
 		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 	else
@@ -845,7 +891,8 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 		say("Avantage", sub, 1.5)
 		return
 	end
-	if card then stats.cards += 1 end
+	if card then stats.cards += 1; ms.teams[f.team].cards += 1 end
+	ms.teams[f.team].fouls += 1
 	comment(if card == "red" then `Carton rouge ! {f.name} est expulsé.` elseif card == "yellow" then `Carton jaune pour {f.name}.`
 		else `Faute de {f.name} sur {v.name}.`, if card then 0.4 else 0.15, card ~= nil or inBox)
 	if inBox then
@@ -903,6 +950,12 @@ end
 local function goalFor(t: number)
 	if owner then (owner :: Actor).kicked = true end
 	local lt = lastTouch
+	if lt and lt.team == t then
+		pstat(lt, "goals")
+		table.insert(ms.scorers, { name = lt.name, team = t, minute = math.max(1, math.floor(clock + 0.5)) })
+	else
+		table.insert(ms.scorers, { name = "csc", team = t, minute = math.max(1, math.floor(clock + 0.5)) })
+	end
 	table.insert(goalLog, {
 		team = t, clock = math.floor(clock), how = boundsHow, phase = phase,
 		x = math.floor(ball.x * 100) / 100, y = math.floor(ball.y * 100) / 100, z = math.floor(ball.z * 100) / 100,
@@ -925,6 +978,12 @@ local function goalFor(t: number)
 		if pl then
 			Economy.earn(pl, "goal")
 			Economy.stat(pl, "goals")
+			-- All-time scorers board in the locker room
+			task.spawn(function()
+				pcall(function()
+					game:GetService("DataStoreService"):GetOrderedDataStore("FC27Goals_v1"):IncrementAsync(tostring(pl.UserId), 1)
+				end)
+			end)
 			-- His own celebration if he bought them (shop), otherwise none: the team celebrates anyway
 			local cel = Economy.owns(pl, "celebrations") and Economy.equipOf(pl).celebration
 			if cel then act(sc, cel) end
@@ -986,6 +1045,16 @@ local function netContain()
 end
 
 -- ---------- Possession and keepers ----------
+local function callOffside(m: Actor)
+	offsideSet = nil
+	ms.teams[m.team].offsides += 1
+	local x, y = posOf(m)
+	say("Hors-jeu", `{m.name} était en position de hors-jeu`, 1.8)
+	comment(`Hors-jeu de {m.name}, le drapeau se lève.`, 0.15, true)
+	label(m, "Hors-jeu", Color3.fromRGB(255, 220, 90), 1.6)
+	setPiece("freekick", 3 - m.team, math.clamp(x, 1, L - 1), math.clamp(y, 1, W - 1))
+end
+
 local function tryControl()
 	if owner then return end
 	local db = dribbler
@@ -1035,6 +1104,7 @@ local function tryControl()
 		if ball.z < 0.9 and d < reach and d < bd then best, bd = a, d end
 		-- Header for a ball at head height coming at him
 		if ball.z >= 0.9 and ball.z < 2.4 and d < 0.9 and bsp > 4 then
+			if offsideSet and (offsideSet :: any)[a] then callOffside(a); return end
 			local gx = oppGoalX(a.team)
 			local gdx, gdy = gx - x, W / 2 + gauss() * 2 - y
 			local gd = math.sqrt(gdx * gdx + gdy * gdy)
@@ -1047,9 +1117,12 @@ local function tryControl()
 		end
 	end
 	if best then
+		if offsideSet and (offsideSet :: any)[best] then callOffside(best :: Actor); return end
 		local passer = lastTouch
-		if passer and passer ~= best and passer.team == (best :: Actor).team and passer.player then
-			Economy.earn(passer.player :: Player, "pass")
+		if passer and passer ~= best and passer.team == (best :: Actor).team then
+			ms.teams[passer.team].passes += 1
+			pstat(passer, "passes")
+			if passer.player then Economy.earn(passer.player :: Player, "pass") end
 		end
 		giveBall(best)
 	end
@@ -1230,6 +1303,8 @@ local function botThink(a: Actor, dt: number)
 					label(a, "Tacle !", Color3.fromRGB(255, 120, 100), 1.2)
 					if victim.player then say("Ballon perdu", a.name .. " te tacle", 1.2) end
 					giveBall(a)
+					ms.teams[a.team].tackles += 1
+					pstat(a, "tackles")
 					if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 				else
 					label(a, "Tacle raté", Color3.fromRGB(255, 220, 160), 1)
@@ -1280,7 +1355,6 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 	if not pick then return false, "Cette place n’existe pas" end
 	local p = pick :: Actor
 	if p.player then return false, "Place déjà prise" end
-	if p.role == "GK" then return false, "Le gardien reste un robot pour l’instant" end
 	if owner == p then owner = nil end
 	if setTaker == p and phase == "set" then phase = "play" end
 	if p.model then p.model:Destroy() end
@@ -1359,6 +1433,28 @@ task.spawn(function()
 	end
 end)
 
+-- The all-time scorers board in the locker room (OrderedDataStore FC27Goals_v1, filled at each human goal)
+task.spawn(function()
+	local names: { [number]: string } = {}
+	local rows = workspace:WaitForChild("Lobby"):WaitForChild("ScorersBoard"):WaitForChild("Board"):WaitForChild("Rows") :: TextLabel
+	while true do
+		pcall(function()
+			local pages = game:GetService("DataStoreService"):GetOrderedDataStore("FC27Goals_v1"):GetSortedAsync(false, 10)
+			local lines = {}
+			for i, e in pages:GetCurrentPage() do
+				local id = tonumber(e.key) or 0
+				if not names[id] then
+					local ok, n = pcall(function() return Players:GetNameFromUserIdAsync(id) end)
+					names[id] = if ok then n else "?"
+				end
+				table.insert(lines, string.format("%d.  %s  —  %d but%s", i, names[id], e.value, if e.value > 1 then "s" else ""))
+			end
+			rows.Text = if #lines > 0 then table.concat(lines, "\n") else "Pas encore de but."
+		end)
+		task.wait(60)
+	end
+end)
+
 -- Players arrive in the locker room (Pitch.buildLobby) and pick their place there
 local Join = Instance.new("RemoteFunction")
 Join.Name = "Join"
@@ -1386,6 +1482,17 @@ Players.PlayerRemoving:Connect(function(pl)
 	leaveMatch(pl)
 end)
 
+-- A human keeper's dive (the Tacle button, labelled Plonger): towards the side he pushes, or the ball's; for a
+-- moment he reaches 2.2 m instead of 1.3 m (tryControl)
+local function gkDive(a: Actor, ix: number, iy: number)
+	if a.diveT > 0 or held then return end
+	local _, y = posOf(a)
+	local lat = (ball.y - y) * dir[a.team]
+	if math.abs(iy) > 0.3 then lat = iy * dir[a.team] end
+	a.diveT = 0.7
+	act(a, if lat > 0 then "diveR" else "diveL", 0.7)
+end
+
 Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, power: any)
 	local a = actorOfPlayer(pl)
 	if not a or type(kind) ~= "string" then return end
@@ -1405,10 +1512,14 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	local fx, fy
 	if n > 0.1 then fx, fy = dx / n, dz / n else fx, fy = facingOf(a) end
 	if kind == "tackle" then
-		if owner == a and not held then doSkill(a, fx, fy) else doTackle(a) end
+		if owner == a and held and a.role == "GK" then doLob(a, dir[a.team], fy * 0.4, 0.85) -- keeper's clearance (Dégager)
+		elseif owner == a and not held then doSkill(a, fx, fy)
+		elseif a.role == "GK" then gkDive(a, fx, fy)
+		else doTackle(a) end
 		return
 	end
-	if owner ~= a or held then return end
+	-- A keeper with the ball in his hands plays it with Passe, Lob or Tir
+	if owner ~= a or (held and a.role ~= "GK") then return end
 	if kind == "pass" then doPass(a, fx, fy)
 	elseif kind == "through" then doThrough(a, fx, fy)
 	elseif kind == "shoot" then doShoot(a, fx, fy, power)
@@ -1473,8 +1584,18 @@ RunService.Heartbeat:Connect(function(dt)
 	for _, a in actors do
 		a.cool = math.max(0, a.cool - dt)
 		a.stun = math.max(0, a.stun - dt)
+		if a.player then a.diveT = math.max(0, a.diveT - dt) end
 	end
 	separate()
+	-- Possession, and a human keeper holding the ball more than 6 s plays it out
+	if owner and phase == "play" then
+		local o = owner :: Actor
+		ms.teams[o.team].poss += dt
+		if held and o.player then
+			o.holdT -= dt
+			if o.holdT < -4.7 then doLob(o, dir[o.team], gauss() * 0.3, 0.8) end
+		end
+	end
 	idleT += dt
 	if idleT >= 1 then idleT = 0; checkIdle() end
 	for _, a in actors do
@@ -1490,6 +1611,16 @@ RunService.Heartbeat:Connect(function(dt)
 		elseif half == 2 and clock >= 90 then
 			phase, phaseT = "done", 0
 			resetBall(L / 2, W / 2)
+			-- End-of-match screen (client/Stats): score, scorers, team statistics, man of the match
+			local players = {}
+			for _, p in ms.players do table.insert(players, p) end
+			table.sort(players, function(p, q) return p.goals * 10 + p.passes + p.tackles * 2 > q.goals * 10 + q.passes + q.tackles * 2 end)
+			local total = math.max(0.001, ms.teams[1].poss + ms.teams[2].poss)
+			Net:SetAttribute("MatchStats", game:GetService("HttpService"):JSONEncode({
+				score = score, scorers = ms.scorers, teams = ms.teams,
+				poss = { math.floor(ms.teams[1].poss / total * 100 + 0.5), math.floor(ms.teams[2].poss / total * 100 + 0.5) },
+				best = players[1], at = workspace:GetServerTimeNow(),
+			}))
 			for _, a in actors do
 				local pl = a.player
 				if pl then
@@ -1501,7 +1632,7 @@ RunService.Heartbeat:Connect(function(dt)
 			local res = if score[1] == score[2] then "Match nul" elseif score[1] > score[2] then Config.TEAMS[1].name .. " gagnent" else Config.TEAMS[2].name .. " gagnent"
 			say("Fin du match", res .. " · " .. score[1] .. " – " .. score[2], 8)
 		end
-	elseif phase == "goal" and phaseT > 4 then
+	elseif phase == "goal" and phaseT > Config.GOAL_PAUSE then
 		local conceded = if Net:GetAttribute("LastGoalTeam") == 1 then 2 else 1
 		kickoff(conceded)
 	elseif phase == "break" and phaseT > 6 then
@@ -1510,6 +1641,7 @@ RunService.Heartbeat:Connect(function(dt)
 		kickoff(2)
 	elseif phase == "done" and phaseT > 12 then
 		score, half, clock, dir = { 0, 0 }, 1, 0, { 1, -1 }
+		ms = freshStats()
 		Net:SetAttribute("MatchBall", BALLS[rng:NextInteger(1, #BALLS)])
 		for _, a in actors do
 			a.yellow = 0
