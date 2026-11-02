@@ -54,6 +54,8 @@ local BallState = remote("BallState", true) :: any
 local Message = remote("Message") :: RemoteEvent
 Net.Parent = ReplicatedStorage
 local Economy = require(script.Parent.Economy)
+-- What goes wrong in real matches is noted (server/Telemetry; read with scripts/inspect/log.luau)
+local Telemetry = require(script.Parent.Telemetry)
 local Shop = require(Shared.Shop)
 
 Pitch.build(Assets.stadium)
@@ -448,8 +450,8 @@ local function doShoot(a: Actor, dx: number, dy: number, power: number)
 	local tz = BallPhysics.shotHeight(power)
 	local v = (13 + power * 23) * (0.94 + rng:NextNumber() * 0.08)
 	local D = dist2(px, py, gx, ty)
-	local T = D / (v * 0.9)
-	local vz = math.clamp((tz - 0.11) / T + G * T / 2, -2, v * 0.8) + gauss() * power * power * 1.2
+	local flight = D / (v * 0.9)
+	local vz = math.clamp((tz - 0.11) / flight + G * flight / 2, -2, v * 0.8) + gauss() * power * power * 1.2
 	local vh = math.sqrt(math.max(1, v * v - vz * vz))
 	local err = (0.012 + power * power * 0.04) * (1 + math.max(0, gd - 20) * 0.03)
 	local ang = math.atan2(ty - py, gx - px) + gauss() * err
@@ -967,6 +969,11 @@ local function goalFor(t: number)
 		owner = if owner then (owner :: Actor).name else "none", shot = shotBy or 0, held = held,
 	})
 	score[t] += 1
+	do
+		local humans = 0
+		for _, a in actors do if a.player then humans += 1 end end
+		Telemetry.log("goal", { ctx = goalLog[#goalLog], score = `{score[1]}-{score[2]}`, humans = humans })
+	end
 	local own = not (lastTouch and lastTouch.team == t)
 	local scorer = if lastTouch and not own then lastTouch.name else T("sub.og")
 	phase, phaseT = "goal", 0
@@ -1586,6 +1593,51 @@ local idleT = 0
 local sendT, aiT = 0, 0
 local AI_DT = 0.1
 
+-- ---------- The telltale: what should never last ----------
+-- A phase that does not end, a free ball that stays still in play, a ball out of the stadium, a footballer who fell
+-- out of the world: noted once each time (server/Telemetry), with where the ball is and who has it
+local STUCK = { set = 25, goal = Config.GOAL_PAUSE + 8, ["break"] = 16 }
+local wdT, stillT = 0, 0
+local noted: { [string]: boolean } = {}
+local lastPhase = ""
+local function context(): { [string]: any }
+	local humans = 0
+	for _, a in actors do if a.player then humans += 1 end end
+	return {
+		phase = phase, set = setKindNow, phaseT = phaseT, clock = clock, half = half,
+		ball = { ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz },
+		owner = if owner then (owner :: Actor).name .. (if (owner :: Actor).player then " (human)" else "") else "none",
+		held = held, humans = humans, score = `{score[1]}-{score[2]}`,
+	}
+end
+local function note(key: string, kind: string, extra: { [string]: any }?)
+	if noted[key] then return end
+	noted[key] = true
+	local c = context()
+	if extra then for k, v in extra do c[k] = v end end
+	Telemetry.log(kind, c)
+end
+local function watchdog(dt: number)
+	if phase ~= lastPhase then lastPhase = phase; noted = {} end
+	local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
+	stillT = if phase == "play" and not owner and speed < 0.2 then stillT + dt else 0
+	wdT += dt
+	if wdT < 1 then return end
+	wdT = 0
+	local limit = STUCK[phase]
+	if limit and phaseT > limit then note("stuck." .. phase, "stuck") end
+	if stillT > 10 then note("still", "ball-still") end
+	if ball.x ~= ball.x or ball.y ~= ball.y or math.abs(ball.x - L / 2) > L / 2 + 15 or math.abs(ball.y - W / 2) > W / 2 + 15 or ball.z > 60 then
+		note("out", "ball-out")
+	end
+	for _, a in actors do
+		local r = a.root
+		if r and r.Parent and r.Position.Y < Config.GROUND_Y - 30 then
+			note("fell." .. a.name, "fell", { who = a.name .. (if a.player then " (human)" else "") })
+		end
+	end
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	dt = math.min(dt, 0.1)
 	phaseT += dt
@@ -1753,6 +1805,8 @@ RunService.Heartbeat:Connect(function(dt)
 		end
 		aiT = 0
 	end
+
+	watchdog(dt)
 
 	-- Snapshot for the clients
 	sendT += dt

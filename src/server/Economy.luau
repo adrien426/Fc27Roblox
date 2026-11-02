@@ -117,8 +117,8 @@ local function load(pl: Player)
 	do
 		for id, passId in ShopIds.passes do
 			if passId > 0 and not d.owned[id] then
-				local ok, has = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(pl.UserId, passId) end)
-				if ok and has then d.owned[id] = true end
+				local owns, has = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(pl.UserId, passId) end)
+				if owns and has then d.owned[id] = true end
 			end
 		end
 	end

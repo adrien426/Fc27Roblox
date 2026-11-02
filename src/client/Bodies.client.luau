@@ -196,8 +196,11 @@ local function add(inst: Instance, tries: number?)
 		seed = math.random(0, 1000), cur = "", fade = 1, phase = {}, acc = 0,
 	}
 	bodies[model] = st
-	makePlate(st)
-	nameTag(model, root)
+	-- Replay doubles (client/Replay) have no number plate nor name of their own
+	if not model:GetAttribute("Replay") then
+		makePlate(st)
+		nameTag(model, root)
+	end
 end
 
 local function remove(body: Instance)

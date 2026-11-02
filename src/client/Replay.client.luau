@@ -15,8 +15,8 @@ local Net = ReplicatedStorage:WaitForChild("Net")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
-local KEEP = 6 -- seconds kept
-local BEFORE, AFTER = 3.4, 0.5 -- replayed: seconds before the goal and after it
+local KEEP = 10 -- seconds kept (the replay starts Config.REPLAY_AT seconds after the goal, after the celebration)
+local BEFORE, AFTER = 2.6, 0.9 -- replayed: seconds before the ball crosses the line, and after (the ball in the net)
 local SLOW = 2 -- half speed
 local MAX_DOUBLES = 24 -- everybody: footballers left live would walk about at full speed in the middle of it
 
@@ -57,21 +57,67 @@ local function sample(t: number): (Frame?, Frame?, number)
 	return frames[#frames], frames[#frames], 0
 end
 
+-- Hides a real footballer (or the ball) during the replay; the labels over his head that were showing come back
+-- after it, and only those
+local shownLabels: { BillboardGui } = {}
 local function hide(m: Instance, on: boolean)
 	for _, d in m:GetDescendants() do
 		if d:IsA("BasePart") or d:IsA("Decal") then (d :: any).LocalTransparencyModifier = if on then 1 else 0
-		elseif d:IsA("BillboardGui") then d.Enabled = not on end
+		elseif d:IsA("BillboardGui") and on and d.Enabled then d.Enabled = false; table.insert(shownLabels, d) end
 	end
+end
+local function showLabels()
+	for _, g in shownLabels do if g.Parent then g.Enabled = true end end
+	shownLabels = {}
+end
+
+-- What each replay did, sent to the server's telltale (server/Telemetry): to understand a strange replay
+local Report = Net:WaitForChild("Report", 10) :: RemoteEvent?
+local info: { [string]: any } = {}
+local function report()
+	if Report then pcall(function() (Report :: RemoteEvent):FireServer("replay", info) end) end
 end
 
 local function play(goalT: number)
-	if playing or player:GetAttribute("InMatch") ~= true or #frames < 10 then return end
+	info = { frames = #frames, inMatch = player:GetAttribute("InMatch") == true }
+	if playing or player:GetAttribute("InMatch") ~= true or #frames < 10 then info.skipped = "not in match / no frames"; report(); return end
+	-- The moment the ball crossed the line, found in the recording: the message announcing the goal reaches this
+	-- machine a little later, and the ball seen here is a little late too
+	local arrived = goalT
+	for _, f in frames do
+		local b = f.ball
+		if b and f.t > arrived - 3 and f.t < arrived + 1.5 then
+			local px, py = Config.toPitch(b.Position)
+			if (px < 0 or px > Config.L) and math.abs(py - Config.W / 2) < Config.GOAL_HALF + 1 then
+				goalT = f.t
+				break
+			end
+		end
+	end
+	info.crossing = goalT - arrived
 	local t0, t1 = goalT - BEFORE, math.min(goalT + AFTER, frames[#frames].t)
+	-- Not past the moment the ball is put back for the kick-off (a jump)
+	for i = 2, #frames do
+		local a, b = frames[i - 1].ball, frames[i].ball
+		if a and b and frames[i].t > goalT and (a.Position - b.Position).Magnitude > 12 then
+			t1 = math.min(t1, frames[i - 1].t)
+			break
+		end
+	end
 	if frames[1].t > t0 then t0 = frames[1].t end
-	if t1 - t0 < 1 then return end
+	info.span = t1 - t0
+	info.recorded = frames[#frames].t - frames[1].t
+	if t1 - t0 < 1 then info.skipped = "too short"; report(); return end
 	playing = true
 	local goalFrame = select(1, sample(goalT)) :: Frame
 	local ballAtGoal = (goalFrame.ball or CFrame.new()).Position
+	do
+		local n = 0
+		for _ in goalFrame.models do n += 1 end
+		info.models = n
+		info.ballAtGoal = { Config.toPitch(ballAtGoal) }
+		info.hasBall = goalFrame.ball ~= nil
+	end
 
 	-- Doubles of the footballers nearest the ball when it went in
 	local near = {}
@@ -97,6 +143,11 @@ local function play(goalT: number)
 		clone:SetAttribute("Slow", SLOW)
 		clone.Parent = folder
 		doubles[m] = clone
+	end
+	do
+		local n = 0
+		for _ in doubles do n += 1 end
+		info.doubles = n
 	end
 	-- Hide the real ones and the real ball
 	local hidden: { Instance } = {}
@@ -187,10 +238,13 @@ local function play(goalT: number)
 	local done = false
 	skip.Activated:Connect(function() done = true end)
 	local start = os.clock()
+	local renders = 0
+	info.ghost = ghost ~= nil
 	local lastPos: { [Model]: Vector3 } = {}
 	RunService:BindToRenderStep("FC27Replay", Enum.RenderPriority.Camera.Value + 2, function()
 		local tt = t0 + (os.clock() - start) / SLOW
 		if tt >= t1 or done then return end
+		renders += 1
 		local fa, fb, k = sample(tt)
 		if not fa or not fb then return end
 		local a, b = fa :: Frame, fb :: Frame
@@ -230,6 +284,9 @@ local function play(goalT: number)
 	end)
 	while not done and os.clock() - start < (t1 - t0) * SLOW do task.wait() end
 
+	info.played = os.clock() - start
+	info.skippedByPlayer = done
+	info.fps = renders / math.max(0.1, os.clock() - start)
 	-- Back to the match
 	RunService:UnbindFromRenderStep("FC27Replay")
 	gui:Destroy()
@@ -238,20 +295,34 @@ local function play(goalT: number)
 		if h.Parent then hide(h, false) end
 		if h:IsA("BasePart") then (h :: any).LocalTransparencyModifier = 0 end
 	end
+	showLabels()
 	if shadow then (shadow :: any).LocalTransparencyModifier = 0 end
 	if restoreGuis then restoreGuis(); restoreGuis = nil end
 	camera.CameraType = Enum.CameraType.Custom
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if hum then camera.CameraSubject = hum end
 	playing = false
+	report()
 end
 
 Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
 	local goalT = os.clock()
-	task.delay(1.2, function()
+	task.delay(Config.REPLAY_AT, function()
 		local ok, err = pcall(function() play(goalT) end)
 		if not ok then
 			warn("[FC27] replay: " .. tostring(err))
+			info.error = tostring(err)
+			report()
+			-- Everything visible again (the footballers and the ball were hidden for the replay)
+			for _, body in CollectionService:GetTagged("FC27Body") do
+				local m = body.Parent
+				if m and not m:GetAttribute("Replay") then hide(m, false) end
+			end
+			for _, n in { "FC27Ball", "FC27BallShadow" } do
+				local b = workspace:FindFirstChild(n)
+				if b then hide(b, false); if b:IsA("BasePart") then (b :: any).LocalTransparencyModifier = 0 end end
+			end
+			showLabels()
 			playing = false
 			RunService:UnbindFromRenderStep("FC27Replay")
 			local r = restoreGuis
