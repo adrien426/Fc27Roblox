@@ -1,0 +1,225 @@
+--!strict
+-- Goal replays, like the web game: this machine keeps the last seconds of play (every footballer's position and
+-- action, and the ball), and after a goal shows them again at half speed from a TV camera beside the goal. The
+-- players near the ball are shown by doubles (clones, animated by client/Bodies at half speed, "Slow" = 2), the
+-- real ones are hidden meanwhile. "Passer" ends it. The server waits Config.GOAL_PAUSE before the kick-off.
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Net = ReplicatedStorage:WaitForChild("Net")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local KEEP = 6 -- seconds kept
+local BEFORE, AFTER = 3.4, 0.5 -- replayed: seconds before the goal and after it
+local SLOW = 2 -- half speed
+local MAX_DOUBLES = 10
+
+type Snap = { cf: CFrame, act: string?, actAt: number?, actDur: number? }
+type Frame = { t: number, st: number, ball: CFrame?, models: { [Model]: Snap } }
+local frames: { Frame } = {}
+
+-- ---------- Recording ----------
+local acc = 0
+RunService.Heartbeat:Connect(function(dt)
+	acc += dt
+	if acc < 0.05 then return end
+	acc = 0
+	local f: Frame = { t = os.clock(), st = workspace:GetServerTimeNow(), models = {} }
+	local ball = workspace:FindFirstChild("FC27Ball")
+	if ball and ball:IsA("BasePart") then f.ball = ball.CFrame end
+	for _, body in CollectionService:GetTagged("FC27Body") do
+		local m = body.Parent
+		if not m or not m:IsA("Model") or m:GetAttribute("Replay") then continue end
+		local root = m:FindFirstChild("HumanoidRootPart")
+		if not root or not root:IsA("BasePart") then continue end
+		local act = m:GetAttribute("Act")
+		f.models[m] = { cf = root.CFrame, act = if type(act) == "string" then act else nil,
+			actAt = m:GetAttribute("ActAt") :: number?, actDur = m:GetAttribute("ActDur") :: number? }
+	end
+	table.insert(frames, f)
+	while #frames > 0 and f.t - frames[1].t > KEEP do table.remove(frames, 1) end
+end)
+
+-- ---------- Playback ----------
+local playing = false
+local function sample(t: number): (Frame?, Frame?, number)
+	for i = 1, #frames - 1 do
+		local a, b = frames[i], frames[i + 1]
+		if t >= a.t and t <= b.t then return a, b, (t - a.t) / math.max(b.t - a.t, 1e-3) end
+	end
+	return frames[#frames], frames[#frames], 0
+end
+
+local function hide(m: Instance, on: boolean)
+	for _, d in m:GetDescendants() do
+		if d:IsA("BasePart") or d:IsA("Decal") then (d :: any).LocalTransparencyModifier = if on then 1 else 0
+		elseif d:IsA("BillboardGui") then d.Enabled = not on end
+	end
+end
+
+local function play(goalT: number)
+	if playing or player:GetAttribute("InMatch") ~= true or #frames < 10 then return end
+	local t0, t1 = goalT - BEFORE, math.min(goalT + AFTER, frames[#frames].t)
+	if frames[1].t > t0 then t0 = frames[1].t end
+	if t1 - t0 < 1 then return end
+	playing = true
+	local goalFrame = select(1, sample(goalT)) :: Frame
+	local ballAtGoal = (goalFrame.ball or CFrame.new()).Position
+
+	-- Doubles of the footballers nearest the ball when it went in
+	local near = {}
+	for m, snap in goalFrame.models do
+		if m.Parent then table.insert(near, { m = m, d = (snap.cf.Position - ballAtGoal).Magnitude }) end
+	end
+	table.sort(near, function(a, b) return a.d < b.d end)
+	local doubles: { [Model]: Model } = {}
+	local folder = Instance.new("Folder")
+	folder.Name = "FC27Replay"
+	folder.Parent = workspace
+	for i = 1, math.min(MAX_DOUBLES, #near) do
+		local m = near[i].m :: Model
+		m.Archivable = true
+		local ok, c = pcall(function() return m:Clone() end)
+		if not ok or not c then continue end
+		local clone = c :: Model
+		for _, d in clone:GetDescendants() do
+			if d:IsA("BasePart") then d.Anchored = true; d.CanCollide = false; d.CanQuery = false; d.CanTouch = false
+			elseif d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Humanoid") or d:IsA("BillboardGui") or d:IsA("Sound") then d:Destroy() end
+		end
+		clone:SetAttribute("Replay", true)
+		clone:SetAttribute("Slow", SLOW)
+		clone.Parent = folder
+		doubles[m] = clone
+	end
+	-- Hide the real ones and the real ball
+	local hidden: { Instance } = {}
+	for m in doubles do hide(m, true); table.insert(hidden, m) end
+	local realBall = workspace:FindFirstChild("FC27Ball")
+	local shadow = workspace:FindFirstChild("FC27BallShadow")
+	if realBall then hide(realBall, true); (realBall :: any).LocalTransparencyModifier = 1; table.insert(hidden, realBall) end
+	if shadow then (shadow :: any).LocalTransparencyModifier = 1 end
+	local ghost: BasePart? = nil
+	if realBall and realBall:IsA("BasePart") then
+		realBall.Archivable = true
+		local g = realBall:Clone()
+		for _, d in g:GetDescendants() do
+			-- The ball model's pieces stay welded to the ghost (only the ghost itself is anchored)
+			if d:IsA("BasePart") then (d :: any).LocalTransparencyModifier = 0
+			elseif d:IsA("Trail") then d.Enabled = true end
+		end
+		g.LocalTransparencyModifier = 0
+		g.Anchored = true
+		g.Parent = folder
+		ghost = g
+	end
+
+	-- Banner and skip button
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "FC27ReplayGui"
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 11
+	gui.Parent = player:WaitForChild("PlayerGui")
+	for _, top in { true, false } do
+		local bar = Instance.new("Frame")
+		bar.Size = UDim2.new(1, 0, 0.09, 0)
+		bar.Position = if top then UDim2.new() else UDim2.new(0, 0, 0.91, 0)
+		bar.BackgroundColor3 = Color3.new(0, 0, 0)
+		bar.BorderSizePixel = 0
+		bar.Parent = gui
+	end
+	local tag = Instance.new("TextLabel")
+	tag.AnchorPoint = Vector2.new(0.5, 0)
+	tag.Position = UDim2.new(0.5, 0, 0.1, 0)
+	tag.Size = UDim2.fromOffset(200, 30)
+	tag.BackgroundColor3 = Color3.fromRGB(200, 30, 40)
+	tag.Text = "● RALENTI"
+	tag.TextColor3 = Color3.new(1, 1, 1)
+	tag.Font = Enum.Font.GothamBlack
+	tag.TextSize = 18
+	tag.Parent = gui
+	Instance.new("UICorner", tag).CornerRadius = UDim.new(0, 6)
+	local skip = Instance.new("TextButton")
+	skip.AnchorPoint = Vector2.new(1, 1)
+	skip.Position = UDim2.new(1, -20, 0.89, 0)
+	skip.Size = UDim2.fromOffset(120, 38)
+	skip.BackgroundColor3 = Color3.fromRGB(242, 194, 48)
+	skip.Text = "Passer  »"
+	skip.Font = Enum.Font.GothamBlack
+	skip.TextSize = 16
+	skip.TextColor3 = Color3.fromRGB(14, 24, 18)
+	skip.Parent = gui
+	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 8)
+
+	-- TV camera: beside and behind the goal, high, following the ball
+	local goalRight = Config.toPitch(ballAtGoal) > Config.L / 2
+	local gx = if goalRight then Config.L + 7 else -7
+	local eye0 = Config.toWorld(gx, Config.W / 2 + 14, 7)
+	local done = false
+	skip.Activated:Connect(function() done = true end)
+	local start = os.clock()
+	local lastPos: { [Model]: Vector3 } = {}
+	RunService:BindToRenderStep("FC27Replay", Enum.RenderPriority.Camera.Value + 2, function()
+		local tt = t0 + (os.clock() - start) / SLOW
+		if tt >= t1 or done then return end
+		local fa, fb, k = sample(tt)
+		if not fa or not fb then return end
+		local a, b = fa :: Frame, fb :: Frame
+		for m, clone in doubles do
+			local sa, sb = a.models[m], b.models[m]
+			if not sa then continue end
+			local cf = if sb then sa.cf:Lerp(sb.cf, k) else sa.cf
+			clone:PivotTo(cf)
+			local rv = if sb then (sb.cf.Position - sa.cf.Position) / math.max(b.t - a.t, 1e-3) else Vector3.zero
+			clone:SetAttribute("ReplayVel", Vector3.new(rv.X, 0, rv.Z))
+			lastPos[m] = cf.Position
+			-- Its action (kick, tackle...) as recorded, at half speed
+			if sa.act and type(sa.actAt) == "number" then
+				local serverT = a.st + (b.st - a.st) * k
+				clone:SetAttribute("Act", sa.act)
+				clone:SetAttribute("ActDur", (sa.actDur or 0) * SLOW)
+				clone:SetAttribute("ActAt", workspace:GetServerTimeNow() - (serverT - (sa.actAt :: number)) * SLOW)
+			end
+		end
+		local g = ghost
+		if g and a.ball then
+			local bc = if b.ball then (a.ball :: CFrame):Lerp(b.ball :: CFrame, k) else a.ball :: CFrame
+			g.CFrame = bc
+			camera.CameraType = Enum.CameraType.Scriptable
+			local want = CFrame.lookAt(eye0, bc.Position)
+			camera.CFrame = if os.clock() - start < 0.05 then want else camera.CFrame:Lerp(want, 0.15)
+		end
+	end)
+	while not done and os.clock() - start < (t1 - t0) * SLOW do task.wait() end
+
+	-- Back to the match
+	RunService:UnbindFromRenderStep("FC27Replay")
+	gui:Destroy()
+	folder:Destroy()
+	for _, h in hidden do
+		if h.Parent then hide(h, false) end
+		if h:IsA("BasePart") then (h :: any).LocalTransparencyModifier = 0 end
+	end
+	if shadow then (shadow :: any).LocalTransparencyModifier = 0 end
+	camera.CameraType = Enum.CameraType.Custom
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if hum then camera.CameraSubject = hum end
+	playing = false
+end
+
+Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
+	local goalT = os.clock()
+	task.delay(1.2, function()
+		local ok, err = pcall(function() play(goalT) end)
+		if not ok then
+			warn("[FC27] replay: " .. tostring(err))
+			playing = false
+			RunService:UnbindFromRenderStep("FC27Replay")
+			camera.CameraType = Enum.CameraType.Custom
+		end
+	end)
+end)

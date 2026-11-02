@@ -193,7 +193,8 @@ if UserInputService.TouchEnabled then
 	BallState.OnClientEvent:Connect(function(_s: any, o: any)
 		haveBall = o ~= nil and o == player.Character
 		local b = gui:FindFirstChild("tackle")
-		if b and b:IsA("TextButton") then b.Text = if haveBall then "Dribble" else "Tacle" end
+		local keeper = player.Character ~= nil and player.Character:GetAttribute("Role") == "GK"
+		if b and b:IsA("TextButton") then b.Text = if haveBall then (if keeper then "Dégager" else "Dribble") elseif keeper then "Plonger" else "Tacle" end
 	end)
 	button("shoot", "Tir", 70, UDim2.new(), Color3.fromRGB(242, 194, 48), dark)
 	button("pass", "Passe", 70, UDim2.new(), Color3.fromRGB(244, 247, 240), dark)

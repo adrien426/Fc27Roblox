@@ -27,7 +27,8 @@ Config.CREATORS = {
 	3900012132, -- salutatous123456
 } :: { number }
 
-Config.IDLE_KICK = 120 -- seconds without touching the controls before a player is replaced by the computer -- real minutes for the full 90'
+Config.IDLE_KICK = 120
+Config.GOAL_PAUSE = 9.5 -- seconds between a goal and the kick-off (the goal's replay plays meanwhile, client/Replay) -- seconds without touching the controls before a player is replaced by the computer -- real minutes for the full 90'
 Config.TEAM_SIZE = 11
 Config.SNAPSHOT_HZ = 20
 
