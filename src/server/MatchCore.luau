@@ -131,6 +131,8 @@ type Actor = {
 	cool: number, stun: number, decT: number, holdT: number, diveT: number, moveT: number, lastTarget: Vector3?,
 	drib: any?, skillCD: number?, lastActive: number?, warned: boolean?,
 	yellow: number?, sentOff: boolean?, kicked: boolean?, charConn: RBXScriptConnection?,
+	protectT: number?, -- (os.clock) a moment after receiving the ball, he cannot be tackled: no ping-pong of possession
+	y0: number?, -- a human keeper's lowest root height seen (his feet on the grass), to know how high he jumps
 }
 local actors: { Actor } = {}
 
@@ -301,7 +303,10 @@ local function kickBall(a: Actor, vx: number, vy: number, vz: number, spin: numb
 	shotBy, target = nil, nil
 end
 
+local turnovers = 0 -- the ball going from one side to the other (half-time report, server/Telemetry)
 local function giveBall(a: Actor)
+	if lastTouch and lastTouch.team ~= a.team then turnovers += 1 end
+	a.protectT = os.clock() + 0.7
 	offsideSet = nil
 	owner = a
 	held = false
@@ -350,8 +355,9 @@ local function bestPass(a: Actor, dx: number?, dy: number?, minAlign: number?): 
 			s = align * 20 + open * 1.0 - math.max(0, d - 25) * 0.15
 		else
 			s = ox * dir[a.team] * 0.35 + open * 1.6 - d * 0.12 + (if m.role == "FW" then 1 else 0)
-			if open < 1.3 then s -= 8 end
 		end
+		-- A marked team-mate (an opponent on the line or next to him) is a gift to the other side
+		if open < 1.3 then s -= 10 end
 		-- Computer players look for the humans first (a free human is worth a longer or less obvious pass)
 		if m.player and not a.player and open >= 1.3 then s += 6 end
 		if s > bestS then best, bestS = m, s end
@@ -1086,7 +1092,14 @@ local function tryControl()
 		if a.role == "GK" then
 			local inBox = math.abs(x - ownGoalX(a.team)) < 16.5 and math.abs(y - W / 2) < 20.16
 			local reach = if a.diveT > 0 then 2.2 else 1.3
-			if inBox and d < reach and ball.z < 2.6 then
+			-- A human keeper in the air (jump) catches higher balls
+			local lift = 0
+			local r = a.root
+			if a.player and r then
+				a.y0 = math.min(a.y0 or r.Position.Y, r.Position.Y)
+				lift = math.max(0, (r.Position.Y - (a.y0 :: number)) / M)
+			end
+			if inBox and d < reach and ball.z < 2.6 + lift then
 				-- A hard shot, or one placed away from him, beats him more often (a human's shot a little more)
 				local chance = 1
 				if shotBy and shotBy ~= a.team then
@@ -1196,21 +1209,29 @@ local function botWithBall(a: Actor, dt: number)
 		moveBot(a, x, y, 0) -- the restart is taken after a short pause, in the main loop
 		return
 	end
+	local gx = oppGoalX(a.team)
+	local gd = dist2(x, y, gx, W / 2)
+	-- Who is around him: the nearest opponent anywhere (pressure), and the nearest one in front of him (room ahead)
+	local pressure, space, aheadY = math.huge, math.huge, nil
+	for _, o in actors do
+		if o.team == a.team or not o.root then continue end
+		local ox, oy = posOf(o)
+		local od = dist2(x, y, ox, oy)
+		pressure = math.min(pressure, od)
+		if o.role ~= "GK" and (ox - x) * d > -0.5 and od < space then space, aheadY = od, oy end
+	end
 	a.decT -= dt
 	if a.decT <= 0 then
 		a.decT = rng:NextNumber(0.3, 0.6)
-		local gx = oppGoalX(a.team)
-		local gd = dist2(x, y, gx, W / 2)
-		local pressure = math.huge
-		for _, o in actors do
-			if o.team ~= a.team and o.root then
-				local ox, oy = posOf(o)
-				pressure = math.min(pressure, dist2(x, y, ox, oy))
-			end
-		end
+		-- Shoot: close enough and in front of the goal; from further out now and then when he has time
 		if gd < 24 and (gx - x) * d > 0.5 then
 			local gdx, gdy = (gx - x) / gd, (W / 2 + gauss() * 2.5 - y) / gd
 			doShoot(a, gdx, gdy, rng:NextNumber(0.55, 0.85))
+			return
+		end
+		if gd < 32 and math.abs(y - W / 2) < 16 and pressure > 3 and rng:NextNumber() < 0.3 then
+			local gdx, gdy = (gx - x) / gd, (W / 2 + gauss() * 2.5 - y) / gd
+			doShoot(a, gdx, gdy, rng:NextNumber(0.8, 1))
 			return
 		end
 		-- Computer players play for the real players: a free human team-mate gets the ball first, even when nobody
@@ -1226,13 +1247,18 @@ local function botWithBall(a: Actor, dt: number)
 				if (ox - x) * fx + (oy - y) * fy > 0 then doSkill(a); return end
 			end
 		end
-		if pressure < 3.5 or rng:NextNumber() < 0.15 then
-			local m = bestPass(a, d, 0, -0.1) or bestPass(a, nil, nil)
+		-- Pass when pressed or blocked ahead (forward first, sideways or back only under pressure); with room
+		-- ahead he carries the ball towards the goal instead of giving it away for nothing
+		if pressure < 3.5 or space < 5 or rng:NextNumber() < 0.06 then
+			local m = bestPass(a, d, 0, -0.1) or (if pressure < 3.5 then bestPass(a, nil, nil) else nil)
 			if m then passTo(a, m); return end
 		end
-		if rng:NextNumber() < 0.06 then doThrough(a, d, 0); return end
+		if rng:NextNumber() < 0.05 then doThrough(a, d, 0); return end
 	end
-	moveBot(a, math.clamp(x + d * 8, 1.5, L - 1.5), y + (W / 2 - y) * 0.15, 19)
+	-- Carry the ball forward, drifting towards the middle, and away from an opponent in front of him
+	local ty = y + (W / 2 - y) * 0.15
+	if aheadY and space < 8 then ty += (if y >= aheadY then 1 else -1) * 4 end
+	moveBot(a, math.clamp(x + d * 8, 1.5, L - 1.5), math.clamp(ty, 2, W - 2), if space > 8 then 21 else 19)
 end
 
 local function keeper(a: Actor, dt: number)
@@ -1304,9 +1330,10 @@ local function botThink(a: Actor, dt: number)
 		if dd > 0.1 then px, py = px + ddx / dd * 0.5, py + ddy / dd * 0.5 end
 		moveBot(a, px, py, 21, true)
 		-- Tackle when close to an opponent with the ball
-		if owner and (owner :: Actor).team ~= t and a.cool <= 0 and not held and not (owner :: Actor).drib then
-			local ox, oy = posOf(owner :: Actor)
-			if dist2(x, y, ox, oy) < 1.5 and rng:NextNumber() < 1.2 * dt then
+		local o = owner :: Actor?
+		if o and o.team ~= t and a.cool <= 0 and not held and not o.drib and os.clock() > (o.protectT or 0) then
+			local ox, oy = posOf(o)
+			if dist2(x, y, ox, oy) < 1.5 and rng:NextNumber() < 0.8 * dt then
 				local succ = if (owner :: Actor).player then 0.42 else 0.5
 				act(a, "tackle", 0.45)
 				local victim = owner :: Actor
@@ -1331,7 +1358,22 @@ local function botThink(a: Actor, dt: number)
 		return
 	end
 	-- Shape: follow the ball across the pitch, push up when the team has it
-	local tx = math.clamp(hx + (ball.x - L / 2) * 0.55 + (if attacking then d * 7 else 0), 3, L - 3)
+	-- When his side has the ball, forwards make runs towards the goal, midfielders support, defenders step up a little
+	local push = if not attacking then 0 elseif a.role == "FW" then 14 elseif a.role == "MF" then 9 else 4
+	local tx = math.clamp(hx + (ball.x - L / 2) * 0.55 + d * push, 3, L - 3)
+	-- ...but not past the second-last opponent (or the ball): no offside
+	if attacking then
+		local xs = {}
+		for _, o in actors do
+			if o.team ~= t and o.root then
+				local ox = posOf(o)
+				table.insert(xs, (ox - L / 2) * d)
+			end
+		end
+		table.sort(xs, function(p, q) return p > q end)
+		local line = math.max(xs[2] or 0, (ball.x - L / 2) * d) - 0.8
+		if (tx - L / 2) * d > line then tx = L / 2 + line * d end
+	end
 	local ty = math.clamp(hy + (ball.y - W / 2) * 0.3, 2, W - 2)
 	local far = dist2(x, y, tx, ty)
 	moveBot(a, tx, ty, if far > 8 then 19 else Config.WALK)
@@ -1395,7 +1437,9 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 		if hum then
 			hum.WalkSpeed = Config.WALK
 			hum.UseJumpPower = false
-			hum.JumpHeight = 0 -- no jumping in a football match (Roblox also hides the jump button)
+			-- No jumping in a football match (Roblox also hides the jump button), except for the keeper: he jumps for
+			-- high balls (tryControl lets him catch higher while he is in the air)
+			hum.JumpHeight = if p.role == "GK" then 5 else 0
 		end
 		local hx, hy = homeOf(p)
 		place(p, hx, hy)
@@ -1684,6 +1728,7 @@ RunService.Heartbeat:Connect(function(dt)
 			phase, phaseT = "break", 0
 			resetBall(L / 2, W / 2)
 			say(T("say.half"), T("sub.score", { a1 = ABBR(1), s1 = score[1], s2 = score[2], a2 = ABBR(2) }), 5)
+			Telemetry.log("half", { half = 1, score = `{score[1]}-{score[2]}`, turnovers = turnovers, teams = ms.teams })
 		elseif half == 2 and clock >= 90 then
 			phase, phaseT = "done", 0
 			resetBall(L / 2, W / 2)
@@ -1692,6 +1737,7 @@ RunService.Heartbeat:Connect(function(dt)
 			for _, p in ms.players do table.insert(players, p) end
 			table.sort(players, function(p, q) return p.goals * 10 + p.passes + p.tackles * 2 > q.goals * 10 + q.passes + q.tackles * 2 end)
 			local total = math.max(0.001, ms.teams[1].poss + ms.teams[2].poss)
+			Telemetry.log("half", { half = 2, score = `{score[1]}-{score[2]}`, turnovers = turnovers, teams = ms.teams })
 			Net:SetAttribute("MatchStats", game:GetService("HttpService"):JSONEncode({
 				score = score, scorers = ms.scorers, teams = ms.teams,
 				poss = { math.floor(ms.teams[1].poss / total * 100 + 0.5), math.floor(ms.teams[2].poss / total * 100 + 0.5) },
@@ -1718,6 +1764,7 @@ RunService.Heartbeat:Connect(function(dt)
 	elseif phase == "done" and phaseT > 12 then
 		score, half, clock, dir = { 0, 0 }, 1, 0, { 1, -1 }
 		ms = freshStats()
+		turnovers = 0
 		Net:SetAttribute("MatchBall", BALLS[rng:NextInteger(1, #BALLS)])
 		for _, a in actors do
 			a.yellow = 0
