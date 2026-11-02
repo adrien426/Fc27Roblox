@@ -94,21 +94,18 @@ end)
 -- From the players' machines: their errors, and each goal replay (client/Report, client/Replay)
 local Report = Instance.new("RemoteEvent")
 Report.Name = "Report"
-local perPlayer: { [Player]: { n: number, m: number } } = {}
+local sentN: { [Player]: number } = {}
+local sentM: { [Player]: number } = {}
 Report.OnServerEvent:Connect(function(pl: Player, kind: any, data: any)
 	if kind ~= "error" and kind ~= "replay" then return end
 	local m = math.floor(os.clock() / 60)
-	local c = perPlayer[pl]
-	if not c or c.m ~= m then
-		c = { n = 0, m = m }
-		perPlayer[pl] = c
-	end
-	local cc = c :: { n: number, m: number }
-	cc.n += 1
-	if cc.n > 6 then return end
+	if sentM[pl] ~= m then sentM[pl] = m; sentN[pl] = 0 end
+	local n = (sentN[pl] or 0) + 1
+	sentN[pl] = n
+	if n > 6 then return end
 	Telemetry.log("client." .. kind, data, pl)
 end)
-Players.PlayerRemoving:Connect(function(pl) perPlayer[pl] = nil end)
+Players.PlayerRemoving:Connect(function(pl) sentN[pl] = nil; sentM[pl] = nil end)
 Report.Parent = ReplicatedStorage:WaitForChild("Net")
 
 return Telemetry
