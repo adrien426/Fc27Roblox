@@ -58,7 +58,91 @@ local function fire(kind: string, power: number?)
 	Action:FireServer(kind, dx, dz, power or 0.5)
 end
 
+-- ---------- Human keeper: a real dive, and a little help to be in front of the shot ----------
+-- The dive (the Tacle button, labelled Plonger, without the ball) throws him DIVE metres sideways along his line,
+-- towards where the stick pushes, otherwise towards the ball; the server lets him catch a little further meanwhile.
+-- The help (on by default, the 🧤 button or G turns it off) shifts him slowly towards where a shot will cross his
+-- line (AimZ on his character, from the server), when he does not move himself.
+local M = Config.M
+local DIVE, DIVE_T = 2.5, 0.35 -- metres, seconds
+local diveDir, diveUntil = 0, 0
+local assist = true
+local function isKeeper(): boolean
+	local char = player.Character
+	return char ~= nil and char:GetAttribute("Role") == "GK" and player:GetAttribute("InMatch") == true
+end
+local function startDive()
+	local hum, root = body()
+	if not hum or not root then return end
+	local side = 0
+	if math.abs(hum.MoveDirection.Z) > 0.3 then
+		side = math.sign(hum.MoveDirection.Z)
+	else
+		local ball = workspace:FindFirstChild("FC27Ball")
+		if ball and ball:IsA("BasePart") and math.abs(ball.Position.Z - root.Position.Z) > 0.3 * M then
+			side = math.sign(ball.Position.Z - root.Position.Z)
+		end
+	end
+	diveDir, diveUntil = side, os.clock() + DIVE_T
+end
+RunService:BindToRenderStep("FC27Keeper", Enum.RenderPriority.Input.Value + 2, function(dt: number)
+	if not isKeeper() then return end
+	local hum, root = body()
+	if not hum or not root then return end
+	local goalZ = Config.toWorld(0, Config.W / 2, 0).Z
+	local maxOff = (Config.GOAL_HALF + 0.6) * M
+	local dz = 0
+	if os.clock() < diveUntil and diveDir ~= 0 then
+		dz = diveDir * DIVE * M / DIVE_T * dt
+	elseif assist and not haveBall and hum.MoveDirection.Magnitude < 0.2 then
+		local z, at = player.Character and player.Character:GetAttribute("AimZ"), player.Character and player.Character:GetAttribute("AimAt")
+		if type(z) == "number" and type(at) == "number" and workspace:GetServerTimeNow() - at < 0.3 then
+			local gap = z - root.Position.Z
+			dz = math.sign(gap) * math.min(math.abs(gap), 4 * M * dt) -- 4 m/s at most
+		end
+	end
+	if dz ~= 0 then
+		local nz = math.clamp(root.Position.Z + dz, goalZ - maxOff, goalZ + maxOff)
+		-- Not past the posts (a step outside them is already allowed for)
+		if math.abs(root.Position.Z - goalZ) > maxOff then nz = root.Position.Z + dz end
+		root.CFrame = root.CFrame + Vector3.new(0, 0, nz - root.Position.Z)
+	end
+end)
+
+-- The help's button, for keepers only: "🧤 Aide : oui / non"
+local helpGui = Instance.new("ScreenGui")
+helpGui.Name = "FC27KeeperHelp"
+helpGui.ResetOnSpawn = false
+helpGui.Parent = player:WaitForChild("PlayerGui")
+local helpBtn = Instance.new("TextButton")
+helpBtn.AnchorPoint = Vector2.new(0, 0)
+helpBtn.Position = UDim2.new(0, 12, 0, 76)
+helpBtn.Size = UDim2.fromOffset(150, 30)
+helpBtn.BackgroundColor3 = Color3.fromRGB(20, 38, 28)
+helpBtn.BackgroundTransparency = 0.15
+helpBtn.TextColor3 = Color3.new(1, 1, 1)
+helpBtn.Font = Enum.Font.GothamBold
+helpBtn.TextSize = 14
+helpBtn.Parent = helpGui
+Instance.new("UICorner", helpBtn).CornerRadius = UDim.new(0, 8)
+local function showHelp()
+	helpBtn.Visible = isKeeper()
+	helpBtn.Text = Lang.t(if assist then "gk.help.on" else "gk.help.off")
+end
+RunService.Heartbeat:Connect(showHelp)
+
 local function press(kind: string)
+	if kind == "tackle" and not haveBall and isKeeper() then
+		-- The server plays the dive to the same side (its animation, and the longer reach)
+		startDive()
+		Action:FireServer("tackle", 0, diveDir, 0.5)
+		return
+	end
+	if kind == "keeperhelp" then
+		assist = not assist
+		showHelp()
+		return
+	end
 	if FULL[kind] then
 		charging = { kind = kind, t0 = os.clock() }
 	elseif kind == "sprint" then
@@ -93,6 +177,7 @@ local BINDS = {
 	{ "tackle", Enum.KeyCode.E, Enum.KeyCode.ButtonX },
 	{ "sprint", Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonR1 },
 	{ "camera", Enum.KeyCode.C, Enum.KeyCode.ButtonSelect },
+	{ "keeperhelp", Enum.KeyCode.G, Enum.KeyCode.DPadUp },
 }
 for _, b in BINDS do
 	local kind = b[1]
@@ -103,6 +188,8 @@ for _, b in BINDS do
 		return Enum.ContextActionResult.Sink
 	end, false, Enum.ContextActionPriority.High.Value, b[2], b[3])
 end
+
+helpBtn.Activated:Connect(function() press("keeperhelp") end)
 
 -- Skill move: the move sets the speed and direction and the body keeps facing where it was going. This runs right
 -- after Roblox's own controls each frame and overrides their movement while the move lasts; the controls are never
