@@ -1,14 +1,16 @@
 --!strict
 -- Every text of the game in six languages: French (the source), English, Spanish, German, Italian, Portuguese.
--- Each player sees and hears his Roblox language (LocalizationService.RobloxLocaleId); any other language gets English.
+-- Each player sees and hears his Roblox language (LocalizationService.RobloxLocaleId). For any other language
+-- (Japanese, Korean...), the French texts are shown and Roblox's own automatic translation is left on (Lang.native()
+-- is false): it translates them, and the commentator's voice too.
 --
 -- - On a player's machine: Lang.t("key", { name = value }) gives the text in his language.
 -- - The server never sends a sentence: it sends Lang.L("key", args), a small coded message ("§key|{json args}"),
 --   and each machine turns it into its own language with Lang.show(text). An argument may itself be a coded message
 --   (a team name, a dribble's name...), translated too. Anything else (a player's name) is shown as it is.
 -- - Several coded messages can be joined by new lines (the scorers board).
--- - Roblox's own automatic translation is switched off on the game's screens (client/Localize): it would translate
---   our translations again, and players' names.
+-- - For the six languages, Roblox's own automatic translation is switched off on the game's screens
+--   (client/Localize): it would translate our translations again, and players' names.
 local HttpService = game:GetService("HttpService")
 
 local Lang = {}
@@ -333,19 +335,25 @@ local S: { [string]: { string } } = {
 }
 Lang.STRINGS = S
 
--- The player's language (on his machine), among the six; any other language gets English
+-- A language among the six, for a Roblox locale ("en-us", "pt-br"...); any other language gets French, the source,
+-- that Roblox translates
 function Lang.code(locale: string?): string
 	local l = string.lower(string.sub(locale or "", 1, 2))
-	return if INDEX[l] then l else "en"
+	return if INDEX[l] then l else "fr"
 end
 
-local current = "fr"
+local current, native = "fr", true
 pcall(function()
 	if game:GetService("RunService"):IsClient() then
-		current = Lang.code(game:GetService("LocalizationService").RobloxLocaleId)
+		local l = string.lower(string.sub(game:GetService("LocalizationService").RobloxLocaleId, 1, 2))
+		native = INDEX[l] ~= nil
+		current = Lang.code(l)
 	end
 end)
+-- This player's language, among the six
 function Lang.current(): string return current end
+-- Whether it is really his language (false: French shown, translated by Roblox)
+function Lang.native(): boolean return native end
 
 local show: (s: any, lang: string?) -> string
 
