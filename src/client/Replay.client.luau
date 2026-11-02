@@ -1,7 +1,7 @@
 --!strict
 -- Goal replays, like the web game: this machine keeps the last seconds of play (every footballer's position and
--- action, and the ball), and after a goal shows them again at half speed from a TV camera beside the goal. The
--- players near the ball are shown by doubles (clones, animated by client/Bodies at half speed, "Slow" = 2), the
+-- action, and the ball), and after a goal shows them again at half speed from a TV camera that follows the ball
+-- closely, from the side and a little behind the action. All the footballers are shown by doubles (clones, animated by client/Bodies at half speed, "Slow" = 2), the
 -- real ones are hidden meanwhile. "Passer" ends it. The server waits Config.GOAL_PAUSE before the kick-off.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,7 +17,7 @@ local camera = workspace.CurrentCamera
 local KEEP = 6 -- seconds kept
 local BEFORE, AFTER = 3.4, 0.5 -- replayed: seconds before the goal and after it
 local SLOW = 2 -- half speed
-local MAX_DOUBLES = 10
+local MAX_DOUBLES = 24 -- everybody: footballers left live would walk about at full speed in the middle of it
 
 type Snap = { cf: CFrame, act: string?, actAt: number?, actDur: number? }
 type Frame = { t: number, st: number, ball: CFrame?, models: { [Model]: Snap } }
@@ -47,6 +47,7 @@ end)
 
 -- ---------- Playback ----------
 local playing = false
+local restoreGuis: (() -> ())? = nil -- puts the screen back if the replay fails half-way
 local function sample(t: number): (Frame?, Frame?, number)
 	for i = 1, #frames - 1 do
 		local a, b = frames[i], frames[i + 1]
@@ -118,6 +119,18 @@ local function play(goalT: number)
 		ghost = g
 	end
 
+	-- Nothing else on the screen meanwhile (score, big messages, buttons): only the replay
+	local pg = player:WaitForChild("PlayerGui")
+	local switched: { ScreenGui } = {}
+	for _, g in pg:GetChildren() do
+		if g:IsA("ScreenGui") and g.Enabled then g.Enabled = false; table.insert(switched, g) end
+	end
+	local fov = camera.FieldOfView
+	restoreGuis = function()
+		for _, g in switched do if g.Parent then g.Enabled = true end end
+		camera.FieldOfView = fov
+	end
+
 	-- Banner and skip button
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "FC27ReplayGui"
@@ -126,15 +139,15 @@ local function play(goalT: number)
 	gui.Parent = player:WaitForChild("PlayerGui")
 	for _, top in { true, false } do
 		local bar = Instance.new("Frame")
-		bar.Size = UDim2.new(1, 0, 0.09, 0)
-		bar.Position = if top then UDim2.new() else UDim2.new(0, 0, 0.91, 0)
+		bar.Size = UDim2.new(1, 0, 0.06, 0)
+		bar.Position = if top then UDim2.new() else UDim2.new(0, 0, 0.94, 0)
 		bar.BackgroundColor3 = Color3.new(0, 0, 0)
 		bar.BorderSizePixel = 0
 		bar.Parent = gui
 	end
 	local tag = Instance.new("TextLabel")
 	tag.AnchorPoint = Vector2.new(0.5, 0)
-	tag.Position = UDim2.new(0.5, 0, 0.1, 0)
+	tag.Position = UDim2.new(0.5, 0, 0.07, 0)
 	tag.Size = UDim2.fromOffset(200, 30)
 	tag.BackgroundColor3 = Color3.fromRGB(200, 30, 40)
 	tag.Text = "● RALENTI"
@@ -145,7 +158,7 @@ local function play(goalT: number)
 	Instance.new("UICorner", tag).CornerRadius = UDim.new(0, 6)
 	local skip = Instance.new("TextButton")
 	skip.AnchorPoint = Vector2.new(1, 1)
-	skip.Position = UDim2.new(1, -20, 0.89, 0)
+	skip.Position = UDim2.new(1, -20, 0.92, 0)
 	skip.Size = UDim2.fromOffset(120, 38)
 	skip.BackgroundColor3 = Color3.fromRGB(242, 194, 48)
 	skip.Text = "Passer  »"
@@ -155,10 +168,21 @@ local function play(goalT: number)
 	skip.Parent = gui
 	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 8)
 
-	-- TV camera: beside and behind the goal, high, following the ball
+	-- TV camera
+	-- Close to the ball (about 15 m), on the side of the main stand and a little behind the play, looking towards
+	-- the goal; it never goes past the advertising boards nor into the goal.
+	local M = Config.M
 	local goalRight = Config.toPitch(ballAtGoal) > Config.L / 2
-	local gx = if goalRight then Config.L + 7 else -7
-	local eye0 = Config.toWorld(gx, Config.W / 2 + 14, 7)
+	local gs = if goalRight then 1 else -1
+	local function eyeFor(b: Vector3): Vector3
+		local bx, by = Config.toPitch(b)
+		local ex = math.clamp(bx - gs * 9, 2, Config.L - 2)
+		local ey = math.max(by - 13, -2)
+		return Config.toWorld(ex, ey, 6)
+	end
+	local eye: Vector3? = nil
+	local look: Vector3? = nil
+	camera.FieldOfView = 50
 	local done = false
 	skip.Activated:Connect(function() done = true end)
 	local start = os.clock()
@@ -190,8 +214,17 @@ local function play(goalT: number)
 			local bc = if b.ball then (a.ball :: CFrame):Lerp(b.ball :: CFrame, k) else a.ball :: CFrame
 			g.CFrame = bc
 			camera.CameraType = Enum.CameraType.Scriptable
-			local want = CFrame.lookAt(eye0, bc.Position)
-			camera.CFrame = if os.clock() - start < 0.05 then want else camera.CFrame:Lerp(want, 0.15)
+			-- Smoothed, so that a shot does not jerk the camera; it aims a little ahead of the ball, towards the goal
+			local target = bc.Position + Vector3.new(gs * 2 * M, 0, 0)
+			local e, l = eye, look
+			if e and l then
+				e = e:Lerp(eyeFor(bc.Position), 0.06)
+				l = l:Lerp(target, 0.2)
+			else
+				e, l = eyeFor(bc.Position), target
+			end
+			eye, look = e, l
+			camera.CFrame = CFrame.lookAt(e :: Vector3, l :: Vector3)
 		end
 	end)
 	while not done and os.clock() - start < (t1 - t0) * SLOW do task.wait() end
@@ -205,6 +238,7 @@ local function play(goalT: number)
 		if h:IsA("BasePart") then (h :: any).LocalTransparencyModifier = 0 end
 	end
 	if shadow then (shadow :: any).LocalTransparencyModifier = 0 end
+	if restoreGuis then restoreGuis(); restoreGuis = nil end
 	camera.CameraType = Enum.CameraType.Custom
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if hum then camera.CameraSubject = hum end
@@ -219,6 +253,12 @@ Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
 			warn("[FC27] replay: " .. tostring(err))
 			playing = false
 			RunService:UnbindFromRenderStep("FC27Replay")
+			local r = restoreGuis
+			if r then restoreGuis = nil; pcall(r) end
+			local f = workspace:FindFirstChild("FC27Replay")
+			if f then f:Destroy() end
+			local g = player:FindFirstChild("PlayerGui") and (player :: any).PlayerGui:FindFirstChild("FC27ReplayGui")
+			if g then g:Destroy() end
 			camera.CameraType = Enum.CameraType.Custom
 		end
 	end)
