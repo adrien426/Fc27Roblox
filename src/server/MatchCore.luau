@@ -450,8 +450,8 @@ local function doShoot(a: Actor, dx: number, dy: number, power: number)
 	local tz = BallPhysics.shotHeight(power)
 	local v = (13 + power * 23) * (0.94 + rng:NextNumber() * 0.08)
 	local D = dist2(px, py, gx, ty)
-	local T = D / (v * 0.9)
-	local vz = math.clamp((tz - 0.11) / T + G * T / 2, -2, v * 0.8) + gauss() * power * power * 1.2
+	local flight = D / (v * 0.9)
+	local vz = math.clamp((tz - 0.11) / flight + G * flight / 2, -2, v * 0.8) + gauss() * power * power * 1.2
 	local vh = math.sqrt(math.max(1, v * v - vz * vz))
 	local err = (0.012 + power * power * 0.04) * (1 + math.max(0, gd - 20) * 0.03)
 	local ang = math.atan2(ty - py, gx - px) + gauss() * err
