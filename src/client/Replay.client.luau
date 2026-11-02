@@ -15,8 +15,8 @@ local Net = ReplicatedStorage:WaitForChild("Net")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
-local KEEP = 6 -- seconds kept
-local BEFORE, AFTER = 3.4, 0.5 -- replayed: seconds before the goal and after it
+local KEEP = 10 -- seconds kept (the replay starts Config.REPLAY_AT seconds after the goal, after the celebration)
+local BEFORE, AFTER = 2.6, 0.9 -- replayed: seconds before the ball crosses the line, and after (the ball in the net)
 local SLOW = 2 -- half speed
 local MAX_DOUBLES = 24 -- everybody: footballers left live would walk about at full speed in the middle of it
 
@@ -81,7 +81,29 @@ end
 local function play(goalT: number)
 	info = { frames = #frames, inMatch = player:GetAttribute("InMatch") == true }
 	if playing or player:GetAttribute("InMatch") ~= true or #frames < 10 then info.skipped = "not in match / no frames"; report(); return end
+	-- The moment the ball crossed the line, found in the recording: the message announcing the goal reaches this
+	-- machine a little later, and the ball seen here is a little late too
+	local arrived = goalT
+	for _, f in frames do
+		local b = f.ball
+		if b and f.t > arrived - 3 and f.t < arrived + 1.5 then
+			local px, py = Config.toPitch(b.Position)
+			if (px < 0 or px > Config.L) and math.abs(py - Config.W / 2) < Config.GOAL_HALF + 1 then
+				goalT = f.t
+				break
+			end
+		end
+	end
+	info.crossing = goalT - arrived
 	local t0, t1 = goalT - BEFORE, math.min(goalT + AFTER, frames[#frames].t)
+	-- Not past the moment the ball is put back for the kick-off (a jump)
+	for i = 2, #frames do
+		local a, b = frames[i - 1].ball, frames[i].ball
+		if a and b and frames[i].t > goalT and (a.Position - b.Position).Magnitude > 12 then
+			t1 = math.min(t1, frames[i - 1].t)
+			break
+		end
+	end
 	if frames[1].t > t0 then t0 = frames[1].t end
 	info.span = t1 - t0
 	info.recorded = frames[#frames].t - frames[1].t
@@ -285,7 +307,7 @@ end
 
 Net:GetAttributeChangedSignal("GoalAt"):Connect(function()
 	local goalT = os.clock()
-	task.delay(1.2, function()
+	task.delay(Config.REPLAY_AT, function()
 		local ok, err = pcall(function() play(goalT) end)
 		if not ok then
 			warn("[FC27] replay: " .. tostring(err))
