@@ -95,22 +95,17 @@ Net:GetAttributeChangedSignal("SetKind"):Connect(function()
 end)
 
 -- ---------- Commentator's voice ----------
--- Roblox's text-to-speech reads the commentary out loud. The text is written in French; AutoLocalize translates it
--- into the player's Roblox language, and the voice is picked to match it (French 401, Spanish 101, German 201,
--- Italian 301, English 1 otherwise). If text-to-speech is not available, the commentary stays on screen only.
-local LocalizationService = game:GetService("LocalizationService")
+-- Roblox's text-to-speech reads the commentary out loud, in the player's language: the server sends a coded message
+-- (shared/Lang), translated here, and read by the voice of that language (Lang.VOICE). Roblox's own translation of
+-- the spoken text is switched off: the text is already in the right language. If text-to-speech is not available,
+-- the commentary stays on screen only.
 local Players = game:GetService("Players")
-local function voiceFor(locale: string): string
-	local lang = string.lower(string.sub(locale, 1, 2))
-	if lang == "fr" then return "401" elseif lang == "es" then return "101" elseif lang == "de" then return "201"
-	elseif lang == "it" then return "301" end
-	return "1"
-end
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
 local tts: any = nil
 pcall(function()
-	local locale = LocalizationService.RobloxLocaleId
 	local t: any = (Instance.new :: any)("AudioTextToSpeech") -- newer than the type definitions
-	t.VoiceId = voiceFor(locale)
+	t.VoiceId = Lang.VOICE[Lang.current()] or "1"
+	pcall(function() t.AutoLocalize = false end)
 	t.Volume = 1.6
 	t.Speed = 1.08
 	t.Parent = SoundService
@@ -132,7 +127,7 @@ Net:GetAttributeChangedSignal("CommentAt"):Connect(function()
 	task.spawn(function()
 		local ok = pcall(function()
 			tts:Pause()
-			tts.Text = text
+			tts.Text = Lang.show(text)
 			tts:LoadAsync()
 			if speaking == mine then tts:Play() end
 		end)

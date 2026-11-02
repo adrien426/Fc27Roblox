@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local Dribbles = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Dribbles"))
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Action = Net:WaitForChild("Action") :: RemoteEvent
 local BallState = Net:WaitForChild("BallState") :: any
@@ -166,7 +167,15 @@ if UserInputService.TouchEnabled then
 		b.Text = text
 		b.TextColor3 = textColor
 		b.Font = Enum.Font.GothamBold
-		b.TextSize = math.floor(size / 4.2)
+		-- Shrinks to fit a long word in some languages (Pallonetto, Cavadinha...)
+		b.TextScaled = true
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = math.floor(size / 4.2)
+		fit.Parent = b
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(0, 5)
+		pad.PaddingRight = UDim.new(0, 5)
+		pad.Parent = b
 		b.AutoButtonColor = true
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0.5, 0)
@@ -194,13 +203,13 @@ if UserInputService.TouchEnabled then
 		haveBall = o ~= nil and o == player.Character
 		local b = gui:FindFirstChild("tackle")
 		local keeper = player.Character ~= nil and player.Character:GetAttribute("Role") == "GK"
-		if b and b:IsA("TextButton") then b.Text = if haveBall then (if keeper then "Dégager" else "Dribble") elseif keeper then "Plonger" else "Tacle" end
+		if b and b:IsA("TextButton") then b.Text = Lang.t(if haveBall then (if keeper then "btn.clear" else "btn.dribble") elseif keeper then "btn.dive" else "btn.tackle") end
 	end)
-	button("shoot", "Tir", 70, UDim2.new(), Color3.fromRGB(242, 194, 48), dark)
-	button("pass", "Passe", 70, UDim2.new(), Color3.fromRGB(244, 247, 240), dark)
-	button("lob", "Lob", 70, UDim2.new(), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
-	button("sprint", "Sprint", 70, UDim2.new(), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
-	button("tackle", "Tacle", 70, UDim2.new(), Color3.fromRGB(255, 107, 87), Color3.new(1, 1, 1))
+	button("shoot", Lang.t("btn.shoot"), 70, UDim2.new(), Color3.fromRGB(242, 194, 48), dark)
+	button("pass", Lang.t("btn.pass"), 70, UDim2.new(), Color3.fromRGB(244, 247, 240), dark)
+	button("lob", Lang.t("btn.lob"), 70, UDim2.new(), Color3.fromRGB(191, 230, 255), Color3.fromRGB(15, 42, 92))
+	button("sprint", Lang.t("btn.sprint"), 70, UDim2.new(), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
+	button("tackle", Lang.t("btn.tackle"), 70, UDim2.new(), Color3.fromRGB(255, 107, 87), Color3.new(1, 1, 1))
 	button("camera", "🎥", 44, UDim2.new(0.5, 0, 0, 30), Color3.fromRGB(20, 38, 28), Color3.new(1, 1, 1))
 
 	-- Two columns above Roblox's jump button, each button the jump button's size, a little apart:

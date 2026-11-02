@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 
 local player = Players.LocalPlayer
@@ -21,9 +22,9 @@ while player:GetAttribute("InMatch") ~= true do player:GetAttributeChangedSignal
 
 local DURATION = 10
 local BALL_NAMES = {
-	classique = "Classique", etoiles = "Étoiles", jabu = "Jabulani", brazu = "Brazuca", euro = "Euro",
+	classique = Lang.t("ball.classique"), etoiles = Lang.t("ball.etoiles"), jabu = "Jabulani", brazu = "Brazuca", euro = "Euro",
 }
-local ROLE = { GK = "Gardien", DF = "Défenseur", MF = "Milieu", FW = "Attaquant" }
+local ROLE = { GK = Lang.t("role.GK"), DF = Lang.t("role.DF"), MF = Lang.t("role.MF"), FW = Lang.t("role.FW") }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "FC27Intro"
@@ -55,7 +56,7 @@ ballCard.BackgroundTransparency = 0.2
 ballCard.Visible = false
 ballCard.Parent = gui
 Instance.new("UICorner", ballCard).CornerRadius = UDim.new(0, 14)
-text(ballCard, { Size = UDim2.new(1, 0, 0, 30), Position = UDim2.fromOffset(0, 10), Text = "BALLON DU MATCH", TextSize = 16, TextColor3 = GOLD })
+text(ballCard, { Size = UDim2.new(1, 0, 0, 30), Position = UDim2.fromOffset(0, 10), Text = Lang.t("intro.ball"), TextSize = 16, TextColor3 = GOLD })
 local ballName = text(ballCard, { Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 1, -42), Text = "", TextSize = 22 })
 local view = Instance.new("ViewportFrame")
 view.Size = UDim2.fromOffset(170, 160)
@@ -70,7 +71,7 @@ local spinning: Model? = nil
 
 local function showBall()
 	local key = Net:GetAttribute("MatchBall")
-	ballName.Text = if type(key) == "string" then (BALL_NAMES[key] or key) else "Classique"
+	ballName.Text = if type(key) == "string" then (BALL_NAMES[key] or key) else BALL_NAMES.classique
 	local assets = ReplicatedStorage:FindFirstChild("FC27Assets")
 	local balls = assets and assets:FindFirstChild("Balls")
 	local src = balls and type(key) == "string" and balls:FindFirstChild(key, true)
@@ -111,7 +112,7 @@ local function column(t: number, list: { any })
 	bar.BackgroundColor3 = team.color
 	bar.BorderSizePixel = 0
 	bar.Parent = col
-	text(col, { Size = UDim2.new(1, 0, 0, 28), Position = UDim2.fromOffset(0, 8), Text = string.upper(team.name), TextSize = 20 })
+	text(col, { Size = UDim2.new(1, 0, 0, 28), Position = UDim2.fromOffset(0, 8), Text = string.upper(Lang.t("team." .. t)), TextSize = 20 })
 	for i, p in list do
 		local y = 40 + (i - 1) * 25
 		local row = text(col, { Size = UDim2.new(1, -24, 0, 22), Position = UDim2.fromOffset(12, y), TextSize = 15, Font = Enum.Font.GothamBold,
@@ -135,7 +136,7 @@ skip.AnchorPoint = Vector2.new(1, 1)
 skip.Position = UDim2.new(1, -24, 1, -24)
 skip.Size = UDim2.fromOffset(130, 44)
 skip.BackgroundColor3 = GOLD
-skip.Text = "Passer  »"
+skip.Text = Lang.t("btn.skip")
 skip.TextColor3 = DARK
 skip.Font = Enum.Font.GothamBlack
 skip.TextSize = 18

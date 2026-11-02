@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 
 local player = Players.LocalPlayer
@@ -73,14 +74,14 @@ local function show()
 	if type(st.at) == "number" and workspace:GetServerTimeNow() - st.at > 30 then return end
 	clear()
 	local t1, t2 = Config.TEAMS[1], Config.TEAMS[2]
-	add({ Size = UDim2.new(1, 0, 0, 22), Position = UDim2.fromOffset(0, 10), Text = "FIN DU MATCH", TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GOLD })
+	add({ Size = UDim2.new(1, 0, 0, 22), Position = UDim2.fromOffset(0, 10), Text = Lang.t("stats.title"), TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GOLD })
 	add({ Size = UDim2.new(1, 0, 0, 40), Position = UDim2.fromOffset(0, 34), TextSize = 30, Font = Enum.Font.GothamBlack,
-		Text = `{t1.abbr}  {st.score[1]} – {st.score[2]}  {t2.abbr}` })
+		Text = `{Lang.t("abbr.1")}  {st.score[1]} – {st.score[2]}  {Lang.t("abbr.2")}` })
 	-- Scorers, under their team
 	for t = 1, 2 do
 		local lines = {}
 		for _, g in st.scorers or {} do
-			if g.team == t then table.insert(lines, `{if g.name == "csc" then "contre son camp" else g.name} {g.minute}’`) end
+			if g.team == t then table.insert(lines, `{if g.name == "csc" then Lang.t("sub.og") else g.name} {g.minute}’`) end
 		end
 		add({ Size = UDim2.new(0.5, -20, 0, 40), Position = UDim2.new(if t == 1 then 0 else 0.5, 10, 0, 76), TextSize = 12, TextWrapped = true,
 			TextXAlignment = if t == 1 then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
@@ -88,13 +89,13 @@ local function show()
 	end
 	-- Statistics side by side
 	local rows = {
-		{ "Possession", `{st.poss[1]} %`, `{st.poss[2]} %` },
-		{ "Tirs", st.teams[1].shots, st.teams[2].shots },
-		{ "Passes réussies", st.teams[1].passes, st.teams[2].passes },
-		{ "Tacles gagnés", st.teams[1].tackles, st.teams[2].tackles },
-		{ "Fautes", st.teams[1].fouls, st.teams[2].fouls },
-		{ "Cartons", st.teams[1].cards, st.teams[2].cards },
-		{ "Hors-jeu", st.teams[1].offsides, st.teams[2].offsides },
+		{ Lang.t("stats.poss"), `{st.poss[1]} %`, `{st.poss[2]} %` },
+		{ Lang.t("stats.shots"), st.teams[1].shots, st.teams[2].shots },
+		{ Lang.t("stats.passes"), st.teams[1].passes, st.teams[2].passes },
+		{ Lang.t("stats.tackles"), st.teams[1].tackles, st.teams[2].tackles },
+		{ Lang.t("stats.fouls"), st.teams[1].fouls, st.teams[2].fouls },
+		{ Lang.t("stats.cards"), st.teams[1].cards, st.teams[2].cards },
+		{ Lang.t("stats.offsides"), st.teams[1].offsides, st.teams[2].offsides },
 	}
 	for i, r in rows do
 		local y = 122 + (i - 1) * 28
@@ -105,7 +106,8 @@ local function show()
 	local best = st.best
 	if type(best) == "table" then
 		add({ Size = UDim2.new(1, -20, 0, 24), Position = UDim2.new(0, 10, 1, -36), TextSize = 15, TextColor3 = GOLD,
-			Text = `★ Homme du match : {best.name} ({Config.TEAMS[best.team] and Config.TEAMS[best.team].abbr or ""}) · {best.goals} but{if best.goals > 1 then "s" else ""}, {best.passes} passes, {best.tackles} tacles` })
+			TextScaled = true,
+			Text = Lang.t("stats.motm", { a = best.name, abbr = if Config.TEAMS[best.team] then Lang.abbr(best.team) else "", g = best.goals, p = best.passes, t = best.tackles }) })
 	end
 	local cam = workspace.CurrentCamera
 	if cam then scale.Scale = math.min(1, (cam.ViewportSize.X - 20) / 560, (cam.ViewportSize.Y - 20) / 380) end
