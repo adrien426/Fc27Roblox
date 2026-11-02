@@ -1,6 +1,6 @@
 --!strict
 -- The shop (walk up to the BOUTIQUE counter in the locker room, or the 🛒 button there): each item with its price in
--- Robux and in coins; once bought, its choices (celebration, boots, special shirt, shot trail) to equip. Coin packs
+-- Robux and in coins, and its picture (assets/art, uploaded as decals: Shared.AssetIds.art); once bought, its choices (celebration, boots, special shirt, shot trail) to equip. Coin packs
 -- at the bottom. The game's creators get everything free (server/Economy), as a banner says. Also: your coins in
 -- the corner of the screen, and a "+50 But" when you earn some.
 local Players = game:GetService("Players")
@@ -10,6 +10,7 @@ local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
 local Shop = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Shop"))
+local AssetIds = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AssetIds")) :: any
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Remote = Net:WaitForChild("Shop") :: RemoteFunction
 
@@ -70,6 +71,21 @@ local function coinIcon(parent: Instance, size: number, pos: UDim2)
 	t.TextColor3 = Color3.fromRGB(150, 100, 10)
 	t.Parent = c
 	return c
+end
+
+-- An item's picture, rounded; nothing when it is not uploaded yet
+local function picture(parent: Instance, id: string, size: number, pos: UDim2)
+	local art = AssetIds.art or {}
+	local assetId = art[id]
+	if type(assetId) ~= "number" or assetId <= 0 then return end
+	local img = Instance.new("ImageLabel")
+	img.Size = UDim2.fromOffset(size, size)
+	img.Position = pos
+	img.BackgroundColor3 = Color3.fromRGB(20, 26, 32)
+	img.Image = `rbxthumb://type=Asset&id={assetId}&w=150&h=150`
+	img.ScaleType = Enum.ScaleType.Crop
+	img.Parent = parent
+	Instance.new("UICorner", img).CornerRadius = UDim.new(0, 10)
 end
 
 -- ---------- Coins in the corner, and what you just earned ----------
@@ -185,38 +201,45 @@ render = function()
 		local rows = if isOwned then (if it.id == "style" then 2 elseif it.choices then 1 else 0) else 0
 		local card = Instance.new("Frame")
 		card.LayoutOrder = i
-		card.Size = UDim2.new(1, -10, 0, 52 + rows * 30)
+		card.Size = UDim2.new(1, -10, 0, 84 + rows * 30)
 		card.BackgroundColor3 = if isOwned then Color3.fromRGB(34, 52, 40) else Color3.fromRGB(28, 36, 44)
 		card.Parent = list
 		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-		label(card, { Size = UDim2.new(0.55, 0, 0, 22), Position = UDim2.fromOffset(10, 5), Text = it.name .. (if isOwned then "  ✓" else ""),
+		picture(card, it.id, 72, UDim2.fromOffset(6, 6))
+		label(card, { Size = UDim2.new(1, -290, 0, 22), Position = UDim2.fromOffset(88, 5), Text = it.name .. (if isOwned then "  ✓" else ""),
 			TextSize = 15, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = if isOwned then GREEN else Color3.new(1, 1, 1) })
-		label(card, { Size = UDim2.new(0.6, 0, 0, 18), Position = UDim2.fromOffset(10, 27), Text = it.desc, TextSize = 11,
-			Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(190, 196, 204), TextWrapped = true })
+		label(card, { Size = UDim2.new(1, if isOwned then -100 else -290, 0, 50), Position = UDim2.fromOffset(88, 28), Text = it.desc, TextSize = 12,
+			Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+			TextColor3 = Color3.fromRGB(190, 196, 204), TextWrapped = true })
 		if not isOwned then
-			local r = button(card, `{it.robux} R$`, Color3.fromRGB(40, 170, 90), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(84, 30), Position = UDim2.new(1, -186, 0, 11) })
+			local r = button(card, `{it.robux} R$`, Color3.fromRGB(40, 170, 90), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(84, 30), Position = UDim2.new(1, -186, 0, 27) })
 			r.Activated:Connect(function() call("buy", it.id, "robux") end)
 			local c = button(card, `     {it.coins}`, if have >= it.coins then GOLD else Color3.fromRGB(70, 70, 70), DARK,
-				{ Size = UDim2.fromOffset(90, 30), Position = UDim2.new(1, -96, 0, 11) })
+				{ Size = UDim2.fromOffset(90, 30), Position = UDim2.new(1, -96, 0, 27) })
 			c.Activated:Connect(function() call("buy", it.id, "coins") end)
 			coinIcon(c, 16, UDim2.new(0, 8, 0.5, 0))
 		elseif it.choices and it.slot then
-			choiceRow(card, 52, it.slot, it.choices, equip[it.slot])
-			if it.id == "style" then choiceRow(card, 82, "kit", Shop.KITS, equip.kit) end
+			choiceRow(card, 84, it.slot, it.choices, equip[it.slot])
+			if it.id == "style" then choiceRow(card, 114, "kit", Shop.KITS, equip.kit) end
 		end
 	end
 	-- Coin packs
 	local packs = Instance.new("Frame")
 	packs.LayoutOrder = 100
-	packs.Size = UDim2.new(1, -10, 0, 50)
+	packs.Size = UDim2.new(1, -10, 0, 128)
 	packs.BackgroundColor3 = Color3.fromRGB(44, 38, 20)
 	packs.Parent = list
 	Instance.new("UICorner", packs).CornerRadius = UDim.new(0, 8)
-	label(packs, { Size = UDim2.fromOffset(150, 50), Position = UDim2.fromOffset(10, 0), Text = "Pièces", TextSize = 15, Font = Enum.Font.GothamBlack,
+	label(packs, { Size = UDim2.fromOffset(150, 22), Position = UDim2.fromOffset(10, 6), Text = "Pièces", TextSize = 15, Font = Enum.Font.GothamBlack,
 		TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = GOLD })
+	label(packs, { Size = UDim2.fromOffset(150, 80), Position = UDim2.fromOffset(10, 30), TextSize = 12, Font = Enum.Font.Gotham, TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Color3.fromRGB(220, 206, 170),
+		Text = "Pour acheter les articles. Tu en gagnes aussi en jouant !" })
 	for i, p in Shop.PACKS do
+		local x = -(4 - i) * 138
+		picture(packs, p.id, 72, UDim2.new(1, x + 29, 0, 8))
 		local b = button(packs, `+{p.coins} · {p.robux} R$`, Color3.fromRGB(40, 170, 90), Color3.new(1, 1, 1),
-			{ Size = UDim2.fromOffset(130, 30), Position = UDim2.new(1, -(4 - i) * 138, 0, 10) })
+			{ Size = UDim2.fromOffset(130, 30), Position = UDim2.new(1, x, 0, 88) })
 		b.Activated:Connect(function() call("pack", p.id) end)
 	end
 end

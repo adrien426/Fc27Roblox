@@ -11,4 +11,14 @@ return {
 		chant = 138515484233725,
 		roar = 116598049171507,
 	},
+	-- The shop's pictures (decals), shown as rbxthumb://type=Asset&id=...
+	art = {
+		celebrations = 0,
+		style = 0,
+		vip = 0,
+		trail = 0,
+		coins500 = 0,
+		coins1500 = 0,
+		coins5000 = 0,
+	},
 }

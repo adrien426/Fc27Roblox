@@ -2,6 +2,7 @@
 // src/shared/AssetIds.luau so the game loads them.
 // - models: assets/build/player.glb, stadium.glb, balls.glb (made by prepare-models.mjs)
 // - sounds: assets/source/sounds/*.mp3
+// - the shop's pictures: assets/art/*.png (as decals; a failure there does not stop the deploy)
 // A file already uploaded is not sent again unless it changed (then a new version of the same asset is uploaded,
 // so its id stays the same). What was sent is remembered in assets/uploaded.json.
 //
@@ -29,6 +30,11 @@ const ITEMS = [
   { key: 'sounds.chant', file: 'assets/source/sounds/chant.mp3', type: 'Audio', mime: 'audio/mpeg', name: 'FC27 Chant' },
   { key: 'sounds.roar', file: 'assets/source/sounds/roar.mp3', type: 'Audio', mime: 'audio/mpeg', name: 'FC27 Roar' },
 ];
+// The shop's pictures (assets/art, drawn by scripts/art), shown on the items in the game's shop
+const ART = ['celebrations', 'style', 'vip', 'trail', 'coins500', 'coins1500', 'coins5000'];
+for (const a of ART) {
+  ITEMS.push({ key: `art.${a}`, file: `assets/art/${a}.png`, type: 'Decal', mime: 'image/png', name: `FC27 Shop ${a}`, optional: true });
+}
 
 const args = process.argv.slice(2);
 const dry = args.includes('--dry-run');
@@ -95,6 +101,10 @@ return {
 \t\tchant = ${id('sounds.chant')},
 \t\troar = ${id('sounds.roar')},
 \t},
+\t-- The shop's pictures (decals), shown as rbxthumb://type=Asset&id=...
+\tart = {
+${ART.map(a => `\t\t${a} = ${id('art.' + a)},`).join('\n')}
+\t},
 }
 `;
   writeFileSync(IDS, src);
@@ -119,7 +129,7 @@ for (const item of ITEMS) {
     console.log(`${item.key}: asset ${id}`);
   } catch (e) {
     console.error(`${item.key}: ${e.message}`);
-    failed++;
+    if (!item.optional) failed++;
   }
 }
 if (!dry) writeIds();
