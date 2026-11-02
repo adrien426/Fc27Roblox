@@ -379,8 +379,9 @@ show = function(s: any, lang: string?): string
 		return table.concat(lines, "\n")
 	end
 	local body = string.sub(s, 3)
-	local bar = string.find(body, "|", 1, true)
-	if not bar then return Lang.t(body, nil, lang) end
+	local found = string.find(body, "|", 1, true)
+	if not found then return Lang.t(body, nil, lang) end
+	local bar: number = found
 	local ok, args = pcall(function() return HttpService:JSONDecode(string.sub(body, bar + 1)) end)
 	return Lang.t(string.sub(body, 1, bar - 1), if ok and type(args) == "table" then args else nil, lang)
 end
