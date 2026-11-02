@@ -84,6 +84,9 @@ end)
 -- shows on screenshots, to understand a ball nobody goes for
 local versionText = label(gui, { Size = UDim2.new(1, -12, 0, 14), Position = UDim2.new(0, 6, 1, -16), Text = "v " .. Version, TextSize = 11,
 	Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.35 })
+-- The debug line (state of the match, sound, voice) is for testing: not shown in the real game
+local Env = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Env")) :: string
+versionText.Visible = Env ~= "prod"
 local function showDebug()
 	local d = Net:GetAttribute("Debug")
 	local a = player:GetAttribute("Audio")

@@ -59,20 +59,57 @@ local function publish(pl: Player)
 	pl:SetAttribute("ShopFree", creators[pl] == true)
 end
 
+-- A player whose save could not be read yet (DataStore down): his session is never written, or it would replace his
+-- real save (coins, items, statistics) with an empty one. His save is read again every 30 s, and merged in.
+local unsafe: { [Player]: boolean } = {}
+
 local function save(pl: Player)
 	local d = data[pl]
-	if not d or not store then return end
+	if not d or not store or unsafe[pl] then return end
 	dirty[pl] = false
 	pcall(function() (store :: DataStore):SetAsync(tostring(pl.UserId), d) end)
 end
 
+-- Reads a player's save: (true, save or nil for a new player), or false when the DataStore did not answer
+local function read(pl: Player): (boolean, any)
+	if not store then return true, nil end
+	for attempt = 1, 4 do
+		local ok, saved = pcall(function() return (store :: DataStore):GetAsync(tostring(pl.UserId)) end)
+		if ok then return true, saved end
+		if attempt < 4 then task.wait(attempt * 1.5) end
+	end
+	return false, nil
+end
+
 local function load(pl: Player)
 	local d = fresh()
-	if store then
-		local ok, saved = pcall(function() return (store :: DataStore):GetAsync(tostring(pl.UserId)) end)
-		if ok and type(saved) == "table" then
-			for k, v in saved do (d :: any)[k] = v end
-		end
+	local ok, saved = read(pl)
+	if ok and type(saved) == "table" then
+		for k, v in saved do (d :: any)[k] = v end
+	elseif not ok then
+		unsafe[pl] = true
+		warn(`[FC27] could not read the save of {pl.Name}: playing without saving until it can be read`)
+		task.spawn(function()
+			while unsafe[pl] and pl.Parent do
+				task.wait(30)
+				local ok2, later = read(pl)
+				local cur = data[pl]
+				if ok2 and cur and pl.Parent then
+					-- His real save, plus what he did meanwhile (coins earned, items, statistics)
+					local real = fresh()
+					if type(later) == "table" then for k, v in later do (real :: any)[k] = v end end
+					real.coins += cur.coins
+					for id, v in cur.owned do if v then real.owned[id] = true end end
+					for slot, v in cur.equip do real.equip[slot] = v end
+					real.goals += cur.goals; real.matches += cur.matches; real.wins += cur.wins
+					data[pl] = real
+					unsafe[pl] = nil
+					dirty[pl] = true
+					publish(pl)
+					save(pl)
+				end
+			end
+		end)
 	end
 	data[pl] = d
 	creators[pl] = isCreator(pl)
@@ -200,7 +237,8 @@ end)
 MarketplaceService.ProcessReceipt = function(info: any): Enum.ProductPurchaseDecision
 	local pl = Players:GetPlayerByUserId(info.PlayerId)
 	local d = pl and data[pl]
-	if not pl or not d then return Enum.ProductPurchaseDecision.NotProcessedYet end
+	-- Not before his save is read: Roblox offers the receipt again later
+	if not pl or not d or unsafe[pl] then return Enum.ProductPurchaseDecision.NotProcessedYet end
 	-- Never give a pack twice for the same receipt
 	if table.find(d.receipts, info.PurchaseId) then return Enum.ProductPurchaseDecision.PurchaseGranted end
 	for id, pid in ShopIds.products do
@@ -225,6 +263,7 @@ Players.PlayerRemoving:Connect(function(pl)
 	data[pl] = nil
 	dirty[pl] = nil
 	creators[pl] = nil
+	unsafe[pl] = nil
 end)
 task.spawn(function()
 	while true do
