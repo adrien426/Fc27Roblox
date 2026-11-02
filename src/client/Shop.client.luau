@@ -11,6 +11,8 @@ local TweenService = game:GetService("TweenService")
 
 local Shop = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Shop"))
 local AssetIds = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AssetIds")) :: any
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
+local t = Lang.t
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Remote = Net:WaitForChild("Shop") :: RemoteFunction
 
@@ -18,7 +20,6 @@ local player = Players.LocalPlayer
 local DARK = Color3.fromRGB(14, 24, 18)
 local GOLD = Color3.fromRGB(242, 194, 48)
 local GREEN = Color3.fromRGB(120, 230, 140)
-local REASON = { goal = "But", pass = "Passe", tackle = "Tacle", win = "Victoire", draw = "Match nul" }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "FC27Shop"
@@ -101,7 +102,7 @@ player:GetAttributeChangedSignal("CoinGainAt"):Connect(function()
 	local why = player:GetAttribute("CoinReason")
 	if type(n) ~= "number" then return end
 	local pop = label(gui, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -130, 0, 44), Size = UDim2.fromOffset(160, 24),
-		Text = `+{n} pièces · {REASON[why] or ""}`, TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GREEN, TextXAlignment = Enum.TextXAlignment.Right })
+		Text = t("shop.gain", { n = n, why = if type(why) == "string" then "§reason." .. why else "" }), TextSize = 16, Font = Enum.Font.GothamBlack, TextColor3 = GREEN, TextXAlignment = Enum.TextXAlignment.Right })
 	TweenService:Create(pop, TweenInfo.new(1.6), { Position = UDim2.new(1, -130, 0, 80), TextTransparency = 1 }):Play()
 	task.delay(1.7, function() pop:Destroy() end)
 end)
@@ -118,12 +119,12 @@ panel.Parent = gui
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 14)
 local scale = Instance.new("UIScale")
 scale.Parent = panel
-label(panel, { Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(16, 8), Text = "🛒 Boutique FC27", TextSize = 20,
+label(panel, { Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(16, 8), Text = t("shop.title"), TextSize = 20,
 	Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left })
 local banner = label(panel, { Size = UDim2.new(1, -230, 0, 18), Position = UDim2.fromOffset(200, 14), TextSize = 12, TextColor3 = GOLD,
 	TextXAlignment = Enum.TextXAlignment.Left, Text = "" })
 local status = label(panel, { Size = UDim2.new(1, -32, 0, 18), Position = UDim2.new(0, 16, 1, -24), TextSize = 13, TextColor3 = GREEN,
-	TextXAlignment = Enum.TextXAlignment.Left, Text = "Tout est cosmétique : rien ne rend plus fort, tout se voit sur le terrain." })
+	TextXAlignment = Enum.TextXAlignment.Left, Text = t("shop.note"), TextScaled = true })
 local close = button(panel, "X", Color3.fromRGB(60, 66, 74), Color3.new(1, 1, 1), { Size = UDim2.fromOffset(34, 34), Position = UDim2.new(1, -44, 0, 8), TextSize = 18 })
 
 local list = Instance.new("ScrollingFrame")
@@ -153,9 +154,9 @@ local function call(action: string, a: string, b: string?)
 	status.Text = "…"
 	local ok, res, msg = pcall(function() return Remote:InvokeServer(action, a, b) end)
 	busy = false
-	if not ok then status.Text = "Erreur, réessaie"; return end
+	if not ok then status.Text = t("shop.error"); return end
 	status.TextColor3 = if res then GREEN else Color3.fromRGB(255, 140, 120)
-	if msg ~= "…" then status.Text = tostring(msg) else status.Text = "Paiement Roblox en cours…" end
+	if msg ~= "…" then status.Text = Lang.show(msg) else status.Text = t("shop.paying") end
 	render()
 end
 
@@ -163,7 +164,7 @@ local function choiceRow(parent: Instance, y: number, slot: string, choices: { S
 	local x = 8
 	for _, c in choices do
 		local on = equipped == c.id
-		local b = button(parent, c.name, if on then GOLD else Color3.fromRGB(44, 54, 62), if on then DARK else Color3.new(1, 1, 1),
+		local b = button(parent, t(`choice.{slot}.{c.id}`), if on then GOLD else Color3.fromRGB(44, 54, 62), if on then DARK else Color3.new(1, 1, 1),
 			{ Size = UDim2.fromOffset(104, 24), Position = UDim2.fromOffset(x, y), TextSize = 12 })
 		-- A colour dot on the left, the name pushed right of it (it used to be drawn over long names); a dark ring
 		-- keeps a gold dot visible on the gold "equipped" button; "Classique" has a neutral grey dot
@@ -192,7 +193,7 @@ end
 
 render = function()
 	for _, c in list:GetChildren() do if c:IsA("Frame") then c:Destroy() end end
-	banner.Text = if player:GetAttribute("ShopFree") == true then "CRÉATEUR : tout est offert" else ""
+	banner.Text = if player:GetAttribute("ShopFree") == true then t("shop.creator") else ""
 	local owned = decode("Owned")
 	local equip = decode("Equip")
 	local have = (player:GetAttribute("Coins") :: number?) or 0
@@ -206,9 +207,9 @@ render = function()
 		card.Parent = list
 		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
 		picture(card, it.id, 72, UDim2.fromOffset(6, 6))
-		label(card, { Size = UDim2.new(1, -290, 0, 22), Position = UDim2.fromOffset(88, 5), Text = it.name .. (if isOwned then "  ✓" else ""),
+		label(card, { Size = UDim2.new(1, -290, 0, 22), Position = UDim2.fromOffset(88, 5), Text = t(`item.{it.id}.name`) .. (if isOwned then "  ✓" else ""),
 			TextSize = 15, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = if isOwned then GREEN else Color3.new(1, 1, 1) })
-		label(card, { Size = UDim2.new(1, if isOwned then -100 else -290, 0, 50), Position = UDim2.fromOffset(88, 28), Text = it.desc, TextSize = 12,
+		label(card, { Size = UDim2.new(1, if isOwned then -100 else -290, 0, 50), Position = UDim2.fromOffset(88, 28), Text = t(`item.{it.id}.desc`), TextSize = 12,
 			Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
 			TextColor3 = Color3.fromRGB(190, 196, 204), TextWrapped = true })
 		if not isOwned then
@@ -230,11 +231,11 @@ render = function()
 	packs.BackgroundColor3 = Color3.fromRGB(44, 38, 20)
 	packs.Parent = list
 	Instance.new("UICorner", packs).CornerRadius = UDim.new(0, 8)
-	label(packs, { Size = UDim2.fromOffset(150, 22), Position = UDim2.fromOffset(10, 6), Text = "Pièces", TextSize = 15, Font = Enum.Font.GothamBlack,
+	label(packs, { Size = UDim2.fromOffset(150, 22), Position = UDim2.fromOffset(10, 6), Text = t("shop.coins"), TextSize = 15, Font = Enum.Font.GothamBlack,
 		TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = GOLD })
 	label(packs, { Size = UDim2.fromOffset(150, 80), Position = UDim2.fromOffset(10, 30), TextSize = 12, Font = Enum.Font.Gotham, TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Color3.fromRGB(220, 206, 170),
-		Text = "Pour acheter les articles. Tu en gagnes aussi en jouant !" })
+		Text = t("shop.coinsinfo") })
 	for i, p in Shop.PACKS do
 		local x = -(4 - i) * 138
 		picture(packs, p.id, 72, UDim2.new(1, x + 29, 0, 8))
@@ -248,7 +249,7 @@ for _, a in { "Owned", "Equip", "Coins" } do
 end
 
 -- 🛒 button in the locker room, and the counter
-local open = button(gui, "🛒 Boutique", GOLD, DARK, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -250, 0, 8), Size = UDim2.fromOffset(110, 32), TextSize = 14 })
+local open = button(gui, t("shop.open"), GOLD, DARK, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -250, 0, 8), Size = UDim2.fromOffset(110, 32), TextSize = 14 })
 local function show(on: boolean)
 	if on then render() end
 	panel.Visible = on

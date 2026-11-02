@@ -3,8 +3,10 @@
 //
 // - description: Open Cloud universe update (permission universe:write, already needed to restart the servers)
 // - thumbnails: homepage thumbnails (permission universe.thumbnail:write)
-// - icon and thumbnails per language (permission legacy-universe:manage): Roblox only takes them for the languages
-//   other than the game's source language; for the source language they are set once by hand in the Creator Hub.
+// - the other languages (permission legacy-universe:manage): turned on for the game, with the description, icon and
+//   thumbnails (titles translated: assets/art/thumbN.<lang>.png) in each; Roblox only takes them for the languages
+//   other than the game's source language (French), whose icon and thumbnails are set once by hand in the Creator Hub.
+// Texts: scripts/store-text.mjs.
 // Each part that fails is reported and the others still go.
 //
 // Environment: ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID
@@ -12,34 +14,19 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { LANGS as ALL_LANGS, GAME_DESCRIPTION } from './store-text.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST = join(ROOT, 'assets', 'game-page.json');
 const key = process.env.ROBLOX_API_KEY, universe = process.env.ROBLOX_UNIVERSE_ID;
 if (!key || !universe) { console.error('ROBLOX_API_KEY and ROBLOX_UNIVERSE_ID must be set.'); process.exit(1); }
 
-const DESCRIPTION = `⚽ FC27 : le foot à 11 contre 11 !
-
-Joue avec tes amis dans un vrai stade. Choisis ton équipe (Rouges ou Bleus) et ton poste dans le vestiaire : attaquant, milieu, défenseur ou gardien. Les places libres sont prises par des robots, donc tu peux jouer même tout seul.
-
-🎮 Comment jouer
-• Cours avec le joystick
-• Passe, Lob et Tir pour jouer le ballon
-• Tacle pour récupérer le ballon
-• Dribble pour faire des gestes techniques
-• Gardien : Plonger pour arrêter les tirs
-
-🏆 Dans le jeu
-• Hors-jeu, fautes, cartons, penaltys, corners et touches
-• Ralenti après chaque but
-• Statistiques à la fin du match et classement des meilleurs buteurs
-• Un commentateur qui parle ta langue
-
-🪙 Gagne des pièces en jouant (buts, passes, tacles, victoires) et débloque des célébrations, des crampons de couleur, des maillots spéciaux et des effets de tir. Tout est pour le style : rien ne rend ton joueur plus fort.`;
+const DESCRIPTION = GAME_DESCRIPTION.fr;
 
 const ICON = join(ROOT, 'assets', 'art', 'icon.png');
-const THUMBS = ['thumb1', 'thumb2', 'thumb3'].map(n => join(ROOT, 'assets', 'art', `${n}.png`)).filter(existsSync);
-const LANGS = ['fr', 'en', 'es', 'de', 'it', 'pt'];
+const thumbsOf = lang => ['thumb1', 'thumb2', 'thumb3'].map(n => join(ROOT, 'assets', 'art', lang === 'fr' ? `${n}.png` : `${n}.${lang}.png`)).filter(existsSync);
+const THUMBS = thumbsOf('fr');
+const LANGS = ALL_LANGS;
 
 const sent = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {};
 const save = () => writeFileSync(MANIFEST, JSON.stringify(sent, null, 2) + '\n');
@@ -78,24 +65,34 @@ await step('thumbnails', thumbsHash, async () => {
   console.log('thumbnails:', JSON.stringify(r).slice(0, 300));
 });
 
-// 3. Icon and thumbnails in each language Roblox accepts (all but the source language)
-let source = null;
+// 3. The other languages: turned on for the game, then its description, icon and thumbnails in each of them (Roblox
+//    takes them for every language but the source one, French)
+const source = 'fr';
+let displayName = 'FC27';
 try {
-  const r = await call('GET', `https://apis.roblox.com/legacy-game-internationalization/v1/source-language/games/${universe}`);
-  source = r.languageCode || r.name || null;
-  console.log(`source language: ${source}`);
-} catch (e) { console.error(`source language: ${e.message}`); }
+  const r = await call('GET', `https://apis.roblox.com/cloud/v2/universes/${universe}`);
+  displayName = r.displayName || displayName;
+} catch (e) { console.error(`universe: ${e.message}`); }
+const others = LANGS.filter(l => l !== source);
+await step('languages', hash(others.join(',')), () =>
+  call('PATCH', `https://apis.roblox.com/legacy-game-internationalization/v1/supported-languages/games/${universe}`, null,
+    others.map(l => ({ languageCodeType: 'Language', languageCode: l, delete: false }))));
+await step('descriptions', hash(displayName, ...others.map(l => GAME_DESCRIPTION[l])), async () => {
+  const r = await call('PATCH', `https://apis.roblox.com/legacy-game-internationalization/v1/name-description/games/${universe}`, null,
+    { data: others.map(l => ({ name: displayName, description: GAME_DESCRIPTION[l], languageCode: l })) });
+  if (r.failedOperations && r.failedOperations.length) throw new Error(JSON.stringify(r.failedOperations).slice(0, 300));
+});
 const iconHash = existsSync(ICON) ? hash(readFileSync(ICON)) : null;
-for (const lang of LANGS) {
-  if (lang === source) continue;
+for (const lang of others) {
   if (iconHash) {
     await step(`icon.${lang}`, iconHash, () => {
       const f = new FormData(); f.append('request.files', png(ICON), 'icon.png'); f.append('files', png(ICON), 'icon.png');
       return call('POST', `https://apis.roblox.com/legacy-game-internationalization/v1/game-icon/games/${universe}/language-codes/${lang}`, f);
     });
   }
-  await step(`thumbnails.${lang}`, thumbsHash, async () => {
-    for (const p of THUMBS) {
+  const files = thumbsOf(lang);
+  await step(`thumbnails.${lang}`, hash(...files.map(p => readFileSync(p))), async () => {
+    for (const p of files) {
       const f = new FormData(); f.append('Files', png(p), p.split('/').pop());
       await call('POST', `https://apis.roblox.com/legacy-game-internationalization/v1/game-thumbnails/games/${universe}/language-codes/${lang}/image`, f);
     }

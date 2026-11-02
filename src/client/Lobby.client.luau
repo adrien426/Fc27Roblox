@@ -16,7 +16,8 @@ local Leave = Net:WaitForChild("Leave") :: RemoteEvent
 local player = Players.LocalPlayer
 local DARK = Color3.fromRGB(14, 24, 18)
 local GOLD = Color3.fromRGB(242, 194, 48)
-local ROLE = { GK = "Gardien", DF = "Défenseur", MF = "Milieu", FW = "Attaquant" }
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
+local ROLE = { GK = Lang.t("role.GK"), DF = Lang.t("role.DF"), MF = Lang.t("role.MF"), FW = Lang.t("role.FW") }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "FC27Lobby"
@@ -46,7 +47,7 @@ panel.Parent = gui
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 14)
 local scale = Instance.new("UIScale")
 scale.Parent = panel
-label(panel, { Size = UDim2.new(1, -60, 0, 34), Position = UDim2.fromOffset(16, 8), Text = "Choisis ton équipe et ton poste",
+label(panel, { Size = UDim2.new(1, -60, 0, 34), Position = UDim2.fromOffset(16, 8), Text = Lang.t("lobby.title"),
 	TextSize = 20, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left })
 local status = label(panel, { Size = UDim2.new(1, -32, 0, 18), Position = UDim2.new(0, 16, 1, -26), Text = "", TextSize = 13,
 	TextColor3 = GOLD, TextXAlignment = Enum.TextXAlignment.Left })
@@ -90,7 +91,7 @@ local function render()
 		bar.BackgroundColor3 = team.color
 		bar.BorderSizePixel = 0
 		bar.Parent = col
-		label(col, { Size = UDim2.new(1, -16, 0, 24), Position = UDim2.fromOffset(8, 6), Text = `{string.upper(team.name)}  ·  {humans} joueur{if humans > 1 then "s" else ""}`,
+		label(col, { Size = UDim2.new(1, -16, 0, 24), Position = UDim2.fromOffset(8, 6), Text = Lang.t(if humans > 1 then "lobby.players" else "lobby.players1", { team = string.upper(Lang.t("team." .. t)), n = humans }),
 			TextSize = 15, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left })
 		for i, p in list do
 			local row = Instance.new("TextButton")
@@ -105,19 +106,19 @@ local function render()
 			label(row, { Size = UDim2.new(0.62, 0, 1, 0), Position = UDim2.fromOffset(6, 0), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left,
 				Text = `{p.num}  {ROLE[p.role] or p.role}`, TextColor3 = if free then Color3.new(1, 1, 1) else Color3.fromRGB(170, 176, 184) })
 			label(row, { Size = UDim2.new(0.38, -6, 1, 0), Position = UDim2.new(0.62, 0, 0, 0), TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right,
-				Text = if p.human then (if p.vip then "★ " else "") .. p.name else "libre  »",
+				Text = if p.human then (if p.vip then "★ " else "") .. p.name else Lang.t("lobby.free"),
 				TextColor3 = if p.human then GOLD elseif free then Color3.fromRGB(140, 230, 150) else Color3.fromRGB(150, 150, 150) })
 			if free then
 				row.Activated:Connect(function()
 					if busy then return end
 					busy = true
-					status.Text = "On t’envoie sur le terrain…"
+					status.Text = Lang.t("lobby.going")
 					local okJ, res, msg = pcall(function() return Join:InvokeServer(t, p.slot) end)
 					busy = false
 					if okJ and res then
 						panel.Visible = false
 					else
-						status.Text = if okJ then tostring(msg) else "Erreur, réessaie"
+						status.Text = if okJ then Lang.show(msg) else Lang.t("shop.error")
 					end
 				end)
 			end
@@ -142,7 +143,7 @@ RunService.Heartbeat:Connect(function()
 	local d = Vector3.new(root.Position.X - ring.Position.X, 0, root.Position.Z - ring.Position.Z).Magnitude
 	local inside = d < ring.Size.Y / 2 and math.abs(root.Position.Y - ring.Position.Y) < 12
 	if inside and not panel.Visible and not dismissed then
-		status.Text = "Touche une place libre pour entrer sur le terrain. Les robots jouent les autres."
+		status.Text = Lang.t("lobby.hint")
 		render()
 		panel.Visible = true
 	elseif not inside then
@@ -161,7 +162,7 @@ back.Position = UDim2.new(1, -12, 0, 8)
 back.Size = UDim2.fromOffset(110, 32)
 back.BackgroundColor3 = Color3.fromRGB(20, 38, 28)
 back.BackgroundTransparency = 0.1
-back.Text = "↩ Vestiaire"
+back.Text = Lang.t("lobby.back")
 back.TextColor3 = Color3.new(1, 1, 1)
 back.Font = Enum.Font.GothamBold
 back.TextSize = 14

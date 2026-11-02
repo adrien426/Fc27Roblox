@@ -133,7 +133,7 @@ local function stand(parent: Instance, center: Vector3, length: number, facing: 
 end
 
 local function boards(parent: Instance)
-	local texts = { "FOOT ARENA", "FC27", "MATCH DU SOIR", "LUXEMBOURG" }
+	local texts = { "FOOT ARENA", "FC27", "⚽ FC27 CUP", "LUXEMBOURG" }
 	local cols = { Color3.fromRGB(215, 38, 61), Color3.fromRGB(43, 111, 214), Color3.fromRGB(242, 194, 48), Color3.fromRGB(20, 20, 24) }
 	local function board(x1: number, y1: number, x2: number, y2: number, i: number)
 		local a, b = toWorld(x1, y1, 0.5), toWorld(x2, y2, 0.5)
@@ -356,7 +356,7 @@ function Pitch.buildLobby(): Folder
 	local t = Instance.new("TextLabel")
 	t.Size = UDim2.fromScale(1, 1)
 	t.BackgroundTransparency = 1
-	t.Text = "MATCH ▼  choisis ton équipe"
+	t.Text = "§lobby.sign" -- coded message, shown in each player's language (shared/Lang, client/Localize)
 	t.TextScaled = true
 	t.Font = Enum.Font.GothamBlack
 	t.TextColor3 = Color3.fromRGB(242, 194, 48)
@@ -382,7 +382,7 @@ function Pitch.buildLobby(): Folder
 	local shopPos = o + Vector3.new(-WID / 2 + 9, 0, LEN / 2 - 40)
 	part(root, { Name = "ShopCounter", Size = Vector3.new(6, 4, 14), CFrame = CFrame.new(shopPos + Vector3.new(0, 2, 0)), Color = Color3.fromRGB(242, 194, 48), Material = Enum.Material.Wood })
 	local shopSign = part(root, { Name = "ShopSign", Size = Vector3.new(1, 5, 16), CFrame = CFrame.new(shopPos + Vector3.new(-3, 9, 0)), Color = Color3.fromRGB(14, 24, 18) })
-	signText(shopSign, Enum.NormalId.Right, "🛒 BOUTIQUE", Color3.fromRGB(242, 194, 48))
+	signText(shopSign, Enum.NormalId.Right, "§lobby.shop", Color3.fromRGB(242, 194, 48))
 	local shopZone = part(root, { Name = "ShopZone", Size = Vector3.new(16, 0.2, 18), CFrame = CFrame.new(shopPos + Vector3.new(7, 0.1, 0)), Color = Color3.fromRGB(242, 194, 48),
 		Material = Enum.Material.Neon, Transparency = 0.7, CanCollide = false })
 	shopZone:SetAttribute("Shop", true)
@@ -409,7 +409,7 @@ function Pitch.buildLobby(): Folder
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0.14, 0)
 	title.BackgroundTransparency = 1
-	title.Text = "⚽ MEILLEURS BUTEURS"
+	title.Text = "§board.title"
 	title.TextScaled = true
 	title.Font = Enum.Font.GothamBlack
 	title.TextColor3 = Color3.fromRGB(242, 194, 48)
@@ -419,7 +419,7 @@ function Pitch.buildLobby(): Folder
 	rows.Size = UDim2.new(0.92, 0, 0.82, 0)
 	rows.Position = UDim2.new(0.04, 0, 0.16, 0)
 	rows.BackgroundTransparency = 1
-	rows.Text = "Pas encore de but."
+	rows.Text = "§board.none"
 	rows.TextScaled = true
 	rows.TextXAlignment = Enum.TextXAlignment.Left
 	rows.TextYAlignment = Enum.TextYAlignment.Top

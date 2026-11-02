@@ -14,6 +14,10 @@ local Assets = require(script.Parent.Assets)
 local Pitch = require(script.Parent.Pitch)
 local Rig = require(script.Parent.Rig)
 local Dribbles = require(Shared.Dribbles)
+-- Texts are sent as coded messages (Lang.L), shown in each player's language on his machine
+local Lang = require(Shared.Lang)
+local T = Lang.L
+local TEAM, ABBR = Lang.team, Lang.abbr
 
 local M, L, W, G = Config.M, Config.L, Config.W, Config.G
 local GH, BAR = Config.GOAL_HALF, Config.BAR
@@ -355,7 +359,7 @@ end
 
 -- Ground pass into the receiver's run, weighted so it reaches him at a comfortable speed
 local function passTo(a: Actor, m: Actor)
-	if m.player then comment(`{a.name} cherche {m.name}`, nil, true) elseif rng:NextNumber() < 0.3 then comment(`Passe de {a.name} pour {m.name}`) end
+	if m.player then comment(T("c.seeks", { a = a.name, b = m.name }), nil, true) elseif rng:NextNumber() < 0.3 then comment(T("c.pass", { a = a.name, b = m.name })) end
 	local px, py = posOf(a)
 	local mx, my = posOf(m)
 	local mvx, mvy = velOf(m)
@@ -451,8 +455,8 @@ local function doShoot(a: Actor, dx: number, dy: number, power: number)
 	local ang = math.atan2(ty - py, gx - px) + gauss() * err
 	kickBall(a, math.cos(ang) * vh, math.sin(ang) * vh, vz)
 	shotBy = a.team
-	say("Tir !", a.name, 0.8)
-	comment(`Frappe de {a.name} !`, 0.3, a.player ~= nil)
+	say(T("say.shot"), a.name, 0.8)
+	comment(T("c.shot", { a = a.name }), 0.3, a.player ~= nil)
 end
 
 -- Lob: the longer it was held, the further and higher. A team-mate running into the landing spot gets it
@@ -531,11 +535,11 @@ local function doTackle(a: Actor)
 	if not victim and phase == "play" and ball.z < 1 and dist2(px, py, ball.x, ball.y) < 2.6 then
 		act(a, "tackle", 0.45)
 		giveBall(a)
-		label(a, "Ballon récupéré", Color3.fromRGB(120, 230, 120), 1)
+		label(a, T("lab.won"), Color3.fromRGB(120, 230, 120), 1)
 		return
 	end
 	if not victim or victim.team == a.team or held then
-		if a.player then label(a, "Personne à tacler", Color3.fromRGB(220, 220, 220), 0.8) end
+		if a.player then label(a, T("lab.noone"), Color3.fromRGB(220, 220, 220), 0.8) end
 		return
 	end
 	-- No tackling the taker of a restart
@@ -544,7 +548,7 @@ local function doTackle(a: Actor)
 	local ox, oy = posOf(victim)
 	-- 2.6 m: the server sees a human's position a little late
 	if dist2(px, py, ox, oy) > (if a.player then 2.6 else 2.3) then
-		if a.player then label(a, "Trop loin", Color3.fromRGB(255, 220, 160), 0.8) end
+		if a.player then label(a, T("lab.far"), Color3.fromRGB(255, 220, 160), 0.8) end
 		stunActor(a, 0.25)
 		return
 	end
@@ -559,14 +563,14 @@ local function doTackle(a: Actor)
 		ball.vx, ball.vy, ball.vz = fx * 4, fy * 4, 0
 		lastTouch = a
 		a.cool = 0.1
-		say("Tacle réussi !", a.name, 0.9)
+		say(T("say.tackle"), a.name, 0.9)
 		if a.player then Economy.earn(a.player, "tackle") end
 		ms.teams[a.team].tackles += 1
 		pstat(a, "tackles")
-		comment(`Tacle de {a.name}, il récupère le ballon.`, 0.2)
+		comment(T("c.tackle", { a = a.name }), 0.2)
 		if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 	else
-		label(a, "Tacle raté", Color3.fromRGB(255, 120, 100), 1)
+		label(a, T("lab.tacklemiss"), Color3.fromRGB(255, 120, 100), 1)
 		stunActor(a, if a.player then 0.35 else 0.6)
 		if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
 	end
@@ -640,7 +644,7 @@ local function dribbleOutcome(a: Actor)
 	d.done = true
 	local m: Dribbles.Move = d.m
 	local q: number = d.q
-	label(a, `{m.name} {math.floor(d.c * 100 + 0.5)} % : {Dribbles.RESULT[q]}`, TIER_COLOR[q], 1.6)
+	label(a, T("lab.drib", { move = "§drib." .. m.key, pct = math.floor(d.c * 100 + 0.5), res = "§res." .. q }), TIER_COLOR[q], 1.6)
 	local opp, od = nearestOpp(a)
 	local knock = m.knock
 	if knock then
@@ -706,7 +710,7 @@ local function dribbleOutcome(a: Actor)
 		d.v0 *= 0.5 -- keeps the ball, but slowed down and the defender is not beaten
 	end
 	if q <= 1 then
-		if a.player and q == 0 then say(`{m.name} raté !`, a.name, 1.2) end
+		if a.player and q == 0 then say(T("say.dribfail", { move = "§drib." .. m.key }), a.name, 1.2) end
 		if not knock then endDribble(a) end
 		return
 	end
@@ -725,8 +729,8 @@ local function dribbleOutcome(a: Actor)
 			end
 		end
 	end
-	if q == 3 and a.player then say(`{m.name} parfait !`, a.name, 1.4) end
-	if q == 3 then comment(`{m.name} parfait de {a.name} !`, 0.4, true) elseif q == 2 and rng:NextNumber() < 0.5 then comment(`Joli geste de {a.name} : {string.lower(m.name)}.`, 0.15) end
+	if q == 3 and a.player then say(T("say.dribperfect", { move = "§drib." .. m.key }), a.name, 1.4) end
+	if q == 3 then comment(T("c.dribperfect", { move = "§drib." .. m.key, a = a.name }), 0.4, true) elseif q == 2 and rng:NextNumber() < 0.5 then comment(T("c.dribnice", { a = a.name, move = "§drib." .. m.key }), 0.15) end
 end
 
 -- Starts a skill move for the player who has the ball. (ix, iy): where his stick points, to choose the side
@@ -765,7 +769,7 @@ local function doSkill(a: Actor, ix: number?, iy: number?)
 	model:SetAttribute("DribV0", d.v0)
 	model:SetAttribute("DribAt", t)
 	model:SetAttribute("Drib", m.key)
-	label(a, `{m.name} {string.rep("★", m.stars)} {math.floor(c * 100 + 0.5)} %`, Color3.fromRGB(201, 182, 255), m.dur + 0.2)
+	label(a, T("lab.dribstart", { move = "§drib." .. m.key, stars = string.rep("★", m.stars), pct = math.floor(c * 100 + 0.5) }), Color3.fromRGB(201, 182, 255), m.dur + 0.2)
 end
 
 -- Every frame for a player in a move: outcome when it is time, and the computer players' movement
@@ -843,13 +847,12 @@ local function setPiece(kind: string, t: number, x: number, y: number, taker: Ac
 	phase, phaseT, setTaker, setKindNow = "set", 0, tk, kind
 	Net:SetAttribute("SetKind", kind)
 	publish()
-	local names = { corner = "Corner", freekick = "Coup franc", penalty = "Penalty", throw = "Touche", goalkick = "Six mètres", kickoff = "Coup d’envoi" }
 	if tk.player then
 		-- Everybody waits for him (8 s at most, then it is played for him)
-		local how = if kind == "penalty" then "Vise avec le joystick, puis Tir" elseif kind == "throw" then "Passe pour remettre en jeu" else "Passe, Lob ou Tir pour jouer"
-		Message:FireClient(tk.player, `À toi : {string.lower(names[kind] or kind)}`, how, 3)
+		local how = if kind == "penalty" then T("how.penalty") elseif kind == "throw" then T("how.throw") else T("how.other")
+		Message:FireClient(tk.player, T("msg.yourturn", { kind = "§set." .. kind }), how, 3)
 	end
-	if kind == "corner" or kind == "freekick" or kind == "penalty" then comment(`{names[kind]} pour les {Config.TEAMS[t].name}, {tk.name} s’en charge.`, 0.15) end
+	if kind == "corner" or kind == "freekick" or kind == "penalty" then comment(T("c.setpiece", { kind = "§set." .. kind, team = TEAM(t), a = tk.name }), 0.15) end
 end
 
 local function inBoxOf(t: number, x: number, y: number): boolean
@@ -868,10 +871,10 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 	end
 	local vx, vy = posOf(v)
 	local inBox = inBoxOf(f.team, vx, vy)
-	local sub = if card == "red" then `Carton rouge pour {f.name} (n°{f.num})`
-		elseif card == "yellow" then `Carton jaune pour {f.name} (n°{f.num})`
-		else `Faute de {f.name} sur {v.name}`
-	label(f, if card == "red" then "🟥 Carton rouge" elseif card == "yellow" then "🟨 Carton jaune" else "Faute !",
+	local sub = if card == "red" then T("sub.red", { a = f.name, n = f.num })
+		elseif card == "yellow" then T("sub.yellow", { a = f.name, n = f.num })
+		else T("sub.foul", { a = f.name, b = v.name })
+	label(f, if card == "red" then T("lab.red") elseif card == "yellow" then T("lab.yellow") else T("lab.foul"),
 		if card == "red" then Color3.fromRGB(227, 34, 47) elseif card == "yellow" then Color3.fromRGB(246, 211, 45) else Color3.fromRGB(255, 173, 71), 2.2)
 	if card == "red" then
 		f.sentOff = true
@@ -887,20 +890,20 @@ foul = function(f: Actor, v: Actor, behind: boolean)
 	local o = owner
 	local attacking = (vx - L / 2) * dir[v.team] > 0
 	if not inBox and attacking and o and o.team == v.team and (o ~= v or (v.stun <= 0 and rng:NextNumber() < 0.6)) then
-		label(o, "Avantage !", Color3.fromRGB(79, 224, 138), 1.5)
-		say("Avantage", sub, 1.5)
+		label(o, T("lab.advantage"), Color3.fromRGB(79, 224, 138), 1.5)
+		say(T("say.advantage"), sub, 1.5)
 		return
 	end
 	if card then stats.cards += 1; ms.teams[f.team].cards += 1 end
 	ms.teams[f.team].fouls += 1
-	comment(if card == "red" then `Carton rouge ! {f.name} est expulsé.` elseif card == "yellow" then `Carton jaune pour {f.name}.`
-		else `Faute de {f.name} sur {v.name}.`, if card then 0.4 else 0.15, card ~= nil or inBox)
+	comment(if card == "red" then T("c.red", { a = f.name }) elseif card == "yellow" then T("c.yellow", { a = f.name })
+		else T("c.foul", { a = f.name, b = v.name }), if card then 0.4 else 0.15, card ~= nil or inBox)
 	if inBox then
 		stats.penalties += 1
-		say("Penalty !", sub, 2.2)
+		say(T("say.penalty"), sub, 2.2)
 		setPiece("penalty", v.team, 0, 0, if v.player then v else nil)
 	else
-		say("Coup franc", sub, 1.8)
+		say(T("set.freekick"), sub, 1.8)
 		setPiece("freekick", v.team, math.clamp(vx, 1, L - 1), math.clamp(vy, 1, W - 1), v)
 	end
 end
@@ -943,8 +946,8 @@ local function kickoff(t: number)
 	end
 	if tk then place(tk, L / 2 - dir[t] * 0.8, W / 2) end
 	setPiece("kickoff", t, L / 2, W / 2, tk)
-	say("Coup d’envoi", Config.TEAMS[t].name, 1.5)
-	comment(`Coup d’envoi pour les {Config.TEAMS[t].name} !`, 0.2, true)
+	say(T("set.kickoff"), TEAM(t), 1.5)
+	comment(T("c.kickoff", { team = TEAM(t) }), 0.2, true)
 end
 
 local function goalFor(t: number)
@@ -964,12 +967,13 @@ local function goalFor(t: number)
 		owner = if owner then (owner :: Actor).name else "none", shot = shotBy or 0, held = held,
 	})
 	score[t] += 1
-	local scorer = if lastTouch and lastTouch.team == t then lastTouch.name else "contre son camp"
+	local own = not (lastTouch and lastTouch.team == t)
+	local scorer = if lastTouch and not own then lastTouch.name else T("sub.og")
 	phase, phaseT = "goal", 0
 	owner, held, shotBy = nil, false, nil
 	publish()
-	say("BUT !", Config.TEAMS[t].name .. " · " .. scorer, 3.5)
-	comment(if scorer == "contre son camp" then `But contre son camp ! Les {Config.TEAMS[t].name} mènent la danse.` else `BUT de {scorer} pour les {Config.TEAMS[t].name} !`, 1, true)
+	say(T("say.goal"), T("sub.goal", { team = TEAM(t), who = scorer }), 3.5)
+	comment(if own then T("c.og", { team = TEAM(t) }) else T("c.goal", { a = scorer, team = TEAM(t) }), 1, true)
 	Net:SetAttribute("LastGoalTeam", t)
 	Net:SetAttribute("GoalAt", workspace:GetServerTimeNow())
 	if lastTouch and lastTouch.team == t then
@@ -1001,13 +1005,13 @@ local function checkBounds(prevX: number)
 	if crossed and ball.z < BAR + 0.15 and math.abs(off - GH) < 0.15 then
 		ball.vx = -ball.vx * 0.6
 		ball.x = if ball.x < 0 then 0.05 else L - 0.05
-		say("Poteau !", nil, 1)
+		say(T("say.post"), nil, 1)
 		return
 	end
 	if crossed and off < GH and math.abs(ball.z - BAR) < 0.15 then
 		ball.vx, ball.vz = -ball.vx * 0.5, math.abs(ball.vz) * 0.3
 		ball.x = if ball.x < 0 then 0.05 else L - 0.05
-		say("Transversale !", nil, 1)
+		say(T("say.bar"), nil, 1)
 		return
 	end
 	if ball.x < -0.17 or ball.x > L + 0.17 then
@@ -1017,17 +1021,17 @@ local function checkBounds(prevX: number)
 		if off < GH and ball.z < BAR then
 			goalFor(attT)
 		elseif lastTouch and lastTouch.team == defT then
-			say("Corner", Config.TEAMS[attT].name, 1.2)
+			say(T("set.corner"), TEAM(attT), 1.2)
 			setPiece("corner", attT, if gx == 0 then 0.6 else L - 0.6, if ball.y < W / 2 then 0.6 else W - 0.6)
 		else
-			say("Six mètres", Config.TEAMS[defT].name, 1.2)
+			say(T("set.goalkick"), TEAM(defT), 1.2)
 			local gk = nil
 			for _, a in actors do if a.team == defT and a.role == "GK" then gk = a end end
 			setPiece("goalkick", defT, if gx == 0 then 5.5 else L - 5.5, W / 2 + (if ball.y < W / 2 then -6 else 6), gk)
 		end
 	elseif ball.y < -0.17 or ball.y > W + 0.17 then
 		local t = if lastTouch and lastTouch.team == 1 then 2 else 1
-		say("Touche", Config.TEAMS[t].name, 1)
+		say(T("set.throw"), TEAM(t), 1)
 		setPiece("throw", t, math.clamp(ball.x, 1, L - 1), if ball.y < 0 then 0 else W)
 	end
 end
@@ -1049,9 +1053,9 @@ local function callOffside(m: Actor)
 	offsideSet = nil
 	ms.teams[m.team].offsides += 1
 	local x, y = posOf(m)
-	say("Hors-jeu", `{m.name} était en position de hors-jeu`, 1.8)
-	comment(`Hors-jeu de {m.name}, le drapeau se lève.`, 0.15, true)
-	label(m, "Hors-jeu", Color3.fromRGB(255, 220, 90), 1.6)
+	say(T("say.offside"), T("sub.offside", { a = m.name }), 1.8)
+	comment(T("c.offside", { a = m.name }), 0.15, true)
+	label(m, T("lab.offside"), Color3.fromRGB(255, 220, 90), 1.6)
 	setPiece("freekick", 3 - m.team, math.clamp(x, 1, L - 1), math.clamp(y, 1, W - 1))
 end
 
@@ -1088,14 +1092,14 @@ local function tryControl()
 					held = true
 					a.holdT = 1.3
 					act(a, "gkCatch", 0.5)
-					if shotBy then say("Arrêt !", a.name, 1); comment(`Arrêt de {a.name} !`, 0.35, true) end
+					if shotBy then say(T("say.save"), a.name, 1); comment(T("c.save", { a = a.name }), 0.35, true) end
 				else
 					-- Beaten: he only grazes it, the ball goes on (it used to bounce back out, so shots almost never
 					-- went in)
 					ball.vx *= 0.85
 					ball.vy = ball.vy * 0.85 + gauss() * 1.2
 					a.cool = 0.8
-					label(a, "Battu !", Color3.fromRGB(255, 120, 100), 1)
+					label(a, T("lab.beaten"), Color3.fromRGB(255, 120, 100), 1)
 				end
 				return
 			end
@@ -1300,14 +1304,14 @@ local function botThink(a: Actor, dt: number)
 					stunActor(victim, 0.6)
 					victim.cool = 0.6
 					act(victim, "trip", 0.6)
-					label(a, "Tacle !", Color3.fromRGB(255, 120, 100), 1.2)
-					if victim.player then say("Ballon perdu", a.name .. " te tacle", 1.2) end
+					label(a, T("lab.tackle"), Color3.fromRGB(255, 120, 100), 1.2)
+					if victim.player then say(T("say.lost"), T("sub.tackledby", { a = a.name }), 1.2) end
 					giveBall(a)
 					ms.teams[a.team].tackles += 1
 					pstat(a, "tackles")
 					if behind and rng:NextNumber() < 0.2 then foul(a, victim, true) end
 				else
-					label(a, "Tacle raté", Color3.fromRGB(255, 220, 160), 1)
+					label(a, T("lab.tacklemiss"), Color3.fromRGB(255, 220, 160), 1)
 					a.cool = 0.8
 					if rng:NextNumber() < (if behind then 0.6 else 0.06) then foul(a, victim, behind) end
 				end
@@ -1347,14 +1351,14 @@ end)
 -- A player in the locker room takes a place: team t, formation slot (client/Lobby). The computer player there steps
 -- aside; the human is dressed in the team's kit and sent onto the pitch at that place.
 local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
-	if actorOfPlayer(pl) then return false, "Tu es déjà sur le terrain" end
+	if actorOfPlayer(pl) then return false, T("join.already") end
 	local pick: Actor? = nil
 	for _, a in actors do
 		if a.team == t and a.slot == slot then pick = a end
 	end
-	if not pick then return false, "Cette place n’existe pas" end
+	if not pick then return false, T("join.noslot") end
 	local p = pick :: Actor
-	if p.player then return false, "Place déjà prise" end
+	if p.player then return false, T("join.taken") end
 	if owner == p then owner = nil end
 	if setTaker == p and phase == "set" then phase = "play" end
 	if p.model then p.model:Destroy() end
@@ -1388,11 +1392,11 @@ local function joinMatch(pl: Player, t: number, slot: number): (boolean, string)
 	p.charConn = pl.CharacterAdded:Connect(onChar)
 	if pl.Character then task.spawn(onChar, pl.Character) end
 	publishLineups()
-	comment(`{pl.DisplayName} entre sur le terrain avec les {Config.TEAMS[t].name} !`, 0.3, true)
+	comment(T("c.enters", { a = pl.DisplayName, team = TEAM(t) }), 0.3, true)
 	if phase == "waiting" then
 		task.delay(2, function() if phase == "waiting" then kickoff(1) end end)
 	end
-	return true, "ok"
+	return true, T("join.ok")
 end
 
 -- Back to the locker room: a computer player takes the place again
@@ -1427,7 +1431,7 @@ task.spawn(function()
 			local rel = zone.CFrame:PointToObjectSpace(root.Position)
 			if math.abs(rel.X) < zone.Size.X / 2 and math.abs(rel.Z) < zone.Size.Z / 2 and math.abs(rel.Y) < 8 then
 				root.CFrame = CFrame.new(root.Position - Vector3.new(zone.Size.X / 2 + 3 + rel.X, 0, 0)) * root.CFrame.Rotation
-				Message:FireClient(pl, "Coin VIP", "Réservé aux VIP : le Pass VIP est à la boutique", 2)
+				Message:FireClient(pl, T("vip.title"), T("vip.sub"), 2)
 			end
 		end
 	end
@@ -1447,9 +1451,9 @@ task.spawn(function()
 					local ok, n = pcall(function() return Players:GetNameFromUserIdAsync(id) end)
 					names[id] = if ok then n else "?"
 				end
-				table.insert(lines, string.format("%d.  %s  —  %d but%s", i, names[id], e.value, if e.value > 1 then "s" else ""))
+				table.insert(lines, T(if e.value > 1 then "board.row" else "board.row1", { i = i, a = names[id], n = e.value }))
 			end
-			rows.Text = if #lines > 0 then table.concat(lines, "\n") else "Pas encore de but."
+			rows.Text = if #lines > 0 then table.concat(lines, "\n") else T("board.none")
 		end)
 		task.wait(60)
 	end
@@ -1459,7 +1463,7 @@ end)
 local Join = Instance.new("RemoteFunction")
 Join.Name = "Join"
 Join.OnServerInvoke = function(pl: Player, t: any, slot: any): (boolean, string)
-	if type(t) ~= "number" or type(slot) ~= "number" or (t ~= 1 and t ~= 2) then return false, "Choix invalide" end
+	if type(t) ~= "number" or type(slot) ~= "number" or (t ~= 1 and t ~= 2) then return false, T("join.invalid") end
 	return joinMatch(pl, t, slot)
 end
 Join.Parent = Net
@@ -1502,7 +1506,7 @@ Action.OnServerEvent:Connect(function(pl: Player, kind: any, dx: any, dz: any, p
 	if kind == "active" then return end
 	if phase ~= "play" and phase ~= "set" then return end
 	if a.stun > 0 then
-		if kind == "tackle" then label(a, "Pas encore…", Color3.fromRGB(220, 220, 220), 0.6) end
+		if kind == "tackle" then label(a, T("lab.notyet"), Color3.fromRGB(220, 220, 220), 0.6) end
 		return
 	end
 	dx = if type(dx) == "number" and dx == dx then dx else 0
@@ -1565,10 +1569,10 @@ local function checkIdle()
 		if not a.lastActive then a.lastActive = t end
 		local idle = t - (a.lastActive :: number)
 		if idle > Config.IDLE_KICK then
-			pl:Kick("Inactif trop longtemps : un joueur de l'ordinateur a pris ta place. Reviens quand tu veux !")
+			pl:Kick(Lang.t("idle.kick", nil, Lang.code(pl.LocaleId)))
 		elseif idle > Config.IDLE_KICK - 20 and not a.warned then
 			a.warned = true
-			Message:FireClient(pl, "Tu es inactif", "Bouge ou tu seras remplacé dans 20 s", 3)
+			Message:FireClient(pl, T("idle.title"), T("idle.sub"), 3)
 		end
 	end
 end
@@ -1607,7 +1611,7 @@ RunService.Heartbeat:Connect(function(dt)
 		if half == 1 and clock >= 45 then
 			phase, phaseT = "break", 0
 			resetBall(L / 2, W / 2)
-			say("Mi-temps", Config.TEAMS[1].abbr .. " " .. score[1] .. " – " .. score[2] .. " " .. Config.TEAMS[2].abbr, 5)
+			say(T("say.half"), T("sub.score", { a1 = ABBR(1), s1 = score[1], s2 = score[2], a2 = ABBR(2) }), 5)
 		elseif half == 2 and clock >= 90 then
 			phase, phaseT = "done", 0
 			resetBall(L / 2, W / 2)
@@ -1629,8 +1633,8 @@ RunService.Heartbeat:Connect(function(dt)
 					elseif score[1] == score[2] then Economy.earn(pl, "draw") end
 				end
 			end
-			local res = if score[1] == score[2] then "Match nul" elseif score[1] > score[2] then Config.TEAMS[1].name .. " gagnent" else Config.TEAMS[2].name .. " gagnent"
-			say("Fin du match", res .. " · " .. score[1] .. " – " .. score[2], 8)
+			local res = if score[1] == score[2] then T("say.draw") else T("say.wins", { team = TEAM(if score[1] > score[2] then 1 else 2) })
+			say(T("say.end"), T("sub.result", { res = res, s1 = score[1], s2 = score[2] }), 8)
 		end
 	elseif phase == "goal" and phaseT > Config.GOAL_PAUSE then
 		local conceded = if Net:GetAttribute("LastGoalTeam") == 1 then 2 else 1
@@ -1770,8 +1774,8 @@ RunService.Heartbeat:Connect(function(dt)
 	if owner ~= lastOwner then
 		local was = lastOwner
 		if was and was.player and not was.kicked then
-			local why = if owner then `{(owner :: Actor).name} t'a pris le ballon` elseif phase == "goal" then "But" else "Balle perdue"
-			Message:FireClient(was.player, "Ballon perdu", why, 1.3)
+			local why = if owner then T("sub.tookball", { a = (owner :: Actor).name }) elseif phase == "goal" then T("sub.goalnow") else T("sub.loose")
+			Message:FireClient(was.player, T("say.lost"), why, 1.3)
 		end
 		if was then was.kicked = false end
 		lastOwner = owner

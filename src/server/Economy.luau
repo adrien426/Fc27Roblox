@@ -16,6 +16,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Shop = require(Shared:WaitForChild("Shop"))
 local ShopIds = require(Shared:WaitForChild("ShopIds")) :: any
 local Config = require(Shared:WaitForChild("Config")) :: any
+-- Answers are coded messages (shared/Lang), shown in the player's language by client/Shop
+local T = require(Shared:WaitForChild("Lang")).L
 local RunService = game:GetService("RunService")
 
 local Economy = {}
@@ -140,49 +142,49 @@ local Remote = Instance.new("RemoteFunction")
 Remote.Name = "Shop"
 Remote.OnServerInvoke = function(pl: Player, action: any, a: any, b: any): (boolean, string)
 	local d = data[pl]
-	if not d then return false, "Chargement…" end
+	if not d then return false, T("shop.loading") end
 	if action == "buy" and type(a) == "string" then
 		local it = Shop.byId[a]
-		if not it then return false, "Article inconnu" end
-		if d.owned[a] then return false, "Tu l’as déjà" end
+		if not it then return false, T("shop.unknown") end
+		if d.owned[a] then return false, T("shop.have") end
 		if b == "coins" then
-			if d.coins < it.coins then return false, `Il te manque {it.coins - d.coins} pièces` end
+			if d.coins < it.coins then return false, T("shop.missing", { n = it.coins - d.coins }) end
 			d.coins -= it.coins
 			grant(pl, a)
-			return true, `{it.name} débloqué !`
+			return true, T("shop.unlocked", { item = `§item.{a}.name` })
 		end
 		if creators[pl] then
 			grant(pl, a)
-			return true, `{it.name} : offert (créateur du jeu)`
+			return true, T("shop.gift", { item = `§item.{a}.name` })
 		end
 		local passId = ShopIds.passes[a] or 0
-		if passId <= 0 then return false, "Bientôt disponible en Robux" end
+		if passId <= 0 then return false, T("shop.soon") end
 		MarketplaceService:PromptGamePassPurchase(pl, passId)
 		return true, "…"
 	elseif action == "pack" and type(a) == "string" then
 		local pack = nil
 		for _, p in Shop.PACKS do if p.id == a then pack = p end end
-		if not pack then return false, "Pack inconnu" end
+		if not pack then return false, T("shop.packunknown") end
 		if creators[pl] then
 			d.coins += pack.coins
 			dirty[pl] = true
 			publish(pl)
-			return true, `+{pack.coins} pièces : offertes (créateur du jeu)`
+			return true, T("shop.packgift", { n = pack.coins })
 		end
 		local productId = ShopIds.products[a] or 0
-		if productId <= 0 then return false, "Bientôt disponible" end
+		if productId <= 0 then return false, T("shop.packsoon") end
 		MarketplaceService:PromptProductPurchase(pl, productId)
 		return true, "…"
 	elseif action == "equip" and type(a) == "string" and type(b) == "string" then
 		-- a: slot (celebration, boots, kit, trail); b: choice
 		local itemFor = if a == "kit" then "style" else nil
 		for _, it in Shop.ITEMS do if it.slot == a then itemFor = it.id end end
-		if not itemFor or not d.owned[itemFor] then return false, "Article non acheté" end
-		if b ~= "none" and not Shop.choice(a, b) then return false, "Choix inconnu" end
+		if not itemFor or not d.owned[itemFor] then return false, T("shop.notowned") end
+		if b ~= "none" and not Shop.choice(a, b) then return false, T("shop.badchoice") end
 		if b == "none" then d.equip[a] = nil else d.equip[a] = b end
 		dirty[pl] = true
 		publish(pl)
-		return true, "Équipé"
+		return true, T("shop.equipped")
 	end
 	return false, "?"
 end
