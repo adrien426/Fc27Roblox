@@ -251,7 +251,8 @@ local function choose(st: Body, now: number, dt: number): (string, number)
 		if Net:GetAttribute("Phase") == "set" and Net:GetAttribute("SetKind") == "throw" then return "throwIn", 1.0 end
 	end
 	-- 3. Goal and full time
-	local phase = Net:GetAttribute("Phase")
+	-- (not for replay doubles: they replay the run-up to the goal, which happened before the celebrations)
+	local phase = if m:GetAttribute("Replay") then nil else Net:GetAttribute("Phase")
 	local team = m:GetAttribute("Team")
 	if phase == "goal" and typeof(team) == "number" then
 		local g = Net:GetAttribute("LastGoalTeam")
