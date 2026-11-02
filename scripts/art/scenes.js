@@ -271,7 +271,7 @@ window.SCENES = {
   } },
 
   // ---------- Thumbnails (1920 x 1080) ----------
-  thumb1: { run() {
+  thumb1: { run(T = {}) {
     const W = 1920, H = 1080; reset(W, H, BG.sky);
     const s = scene3d({ sun: [30, 60, 20], power: 2.2 });
     s.add(pitch(), goal(-52.5), goal(52.5));
@@ -292,10 +292,10 @@ window.SCENES = {
     gl(W, H, s, cam(W, H, 40, [-6, 9, 26], [1, 0, -2]));
     el('div', 'position:absolute;left:0;top:0;width:1100px;height:360px;background:radial-gradient(ellipse at 0% 0%, rgba(10,20,40,.85) 0%, rgba(10,20,40,.55) 45%, rgba(10,20,40,0) 75%)');
     title('FC27', 'left:60px;top:50px', { size: 170, color: '#ffd23f' });
-    title('Foot à 11 contre 11 !', 'left:66px;top:235px', { size: 64 });
+    title(T.t1 || 'Foot à 11 contre 11 !', 'left:66px;top:235px', { size: 64 });
     return [W, H];
   } },
-  thumb2: { run() {
+  thumb2: { run(T = {}) {
     const W = 1920, H = 1080; reset(W, H, BG.sky);
     const s = scene3d({ sun: [10, 20, 14] });
     s.add(pitch(), goal(52.5));
@@ -314,10 +314,10 @@ window.SCENES = {
     const sp = v => [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H];
     trail(W, H, sp(p0), sp(p1), 'fire', 70);
     ballLayer2(W, H, [[...sp(p1), 62]]);
-    title('BUUUT !', 'right:70px;top:60px', { size: 150, color: '#ffd23f' });
+    title(T.t2 || 'BUUUT !', 'right:70px;top:60px', { size: 150, color: '#ffd23f' });
     return [W, H];
   } },
-  thumb3: { run() {
+  thumb3: { run(T = {}) {
     const W = 1920, H = 1080; reset(W, H, BG.purple);
     el('div', 'position:absolute;inset:0;background:repeating-conic-gradient(from 0deg at 50% 60%, rgba(255,255,255,.10) 0 8deg, rgba(255,255,255,0) 8deg 16deg)');
     confetti(160, W, H, ['#ffd23f', '#ff5c8a', '#3fe0ff', '#7dff6b', '#ffffff'], { size: 1.6 });
@@ -332,8 +332,8 @@ window.SCENES = {
       p.position.x = x; p.rotation.y = ry; const bl = blob(0.8); bl.position.x = x; s.add(p, bl);
     }
     gl(W, H, s, cam(W, H, 30, [0, 0.9, 8.6], [0, 1.0, 0]));
-    title('Célèbre tes buts !', 'left:0;right:0;top:40px', { size: 110, color: '#ffd23f' });
-    title('Crampons, maillots, effets de tir', 'left:0;right:0;bottom:50px', { size: 60 });
+    title(T.t3a || 'Célèbre tes buts !', 'left:0;right:0;top:40px', { size: 110, color: '#ffd23f' });
+    title(T.t3b || 'Crampons, maillots, effets de tir', 'left:0;right:0;bottom:50px', { size: 60 });
     return [W, H];
   } },
 };

@@ -8,33 +8,23 @@
 // Usage: node create-shop.mjs
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { LANGS, passText, packText } from './store-text.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const IDS = join(ROOT, 'src', 'shared', 'ShopIds.luau');
-const key = process.env.ROBLOX_API_KEY, universe = process.env.ROBLOX_UNIVERSE_ID;
+const key = process.env.ROBLOX_API_KEY, key_ = key, universe = process.env.ROBLOX_UNIVERSE_ID;
 if (!key || !universe) { console.error('ROBLOX_API_KEY and ROBLOX_UNIVERSE_ID must be set.'); process.exit(1); }
 
-const COSMETIC = 'Pour le style seulement : ça ne rend pas ton joueur plus fort.';
+// Names and descriptions in every language (scripts/store-text.mjs): French is the item's own text, the others are
+// sent as its translations
 const PASSES = [
-  { id: 'celebrations', name: 'FC27 Célébrations', price: 99,
-    description: `Après chaque but, ton joueur fait sa fête : Siuu, danse, victoire ou bravo. Tout le stade la voit ! Tu choisis ta célébration dans la boutique du vestiaire. ${COSMETIC}` },
-  { id: 'style', name: 'FC27 Crampons et maillots', price: 149,
-    description: `Des crampons de couleur (dorés, noirs, blancs, roses ou cyan) et un maillot édition or ou noire. Ta couleur d’équipe reste, pour qu’on te reconnaisse. ${COSMETIC}` },
-  { id: 'vip', name: 'FC27 Pass VIP', price: 299,
-    description: `Ton nom s’écrit en doré avec une étoile ★ au-dessus de ton joueur, et tu entres dans le coin VIP du vestiaire. ${COSMETIC}` },
-  { id: 'trail', name: 'FC27 Effet de tir', price: 149,
-    description: `Quand tu tires, le ballon laisse une traînée derrière lui : feu, étoiles ou glace. Tu choisis ton effet dans la boutique du vestiaire. ${COSMETIC}` },
-];
+  { id: 'celebrations', price: 99 }, { id: 'style', price: 149 }, { id: 'vip', price: 299 }, { id: 'trail', price: 149 },
+].map(p => ({ ...p, ...passText(p.id, 'fr'), text: lang => passText(p.id, lang) }));
 const PACKS = [
-  { id: 'coins500', name: 'FC27 500 pièces', price: 49,
-    description: '500 pièces FC27 pour acheter des articles de la boutique du vestiaire. Tu gagnes aussi des pièces en jouant : buts, passes, tacles et victoires.' },
-  { id: 'coins1500', name: 'FC27 1500 pièces', price: 129,
-    description: '1500 pièces FC27 pour acheter des articles de la boutique du vestiaire. Tu gagnes aussi des pièces en jouant : buts, passes, tacles et victoires.' },
-  { id: 'coins5000', name: 'FC27 5000 pièces', price: 399,
-    description: '5000 pièces FC27 pour acheter des articles de la boutique du vestiaire. Tu gagnes aussi des pièces en jouant : buts, passes, tacles et victoires.' },
-];
+  { id: 'coins500', coins: 500, price: 49 }, { id: 'coins1500', coins: 1500, price: 129 }, { id: 'coins5000', coins: 5000, price: 399 },
+].map(p => ({ ...p, ...packText(p.coins, 'fr'), text: lang => packText(p.coins, lang) }));
 // Each item's picture: assets/art/<id>.png (drawn by scripts/art). What was last sent (name, description, picture)
 // is remembered in assets/shop-art.json, so that an item is only updated when one of them changed.
 const ART = join(ROOT, 'assets', 'shop-art.json');
@@ -64,6 +54,28 @@ async function refresh(kind, url, p) {
   writeFileSync(ART, JSON.stringify(sent, null, 2) + '\n');
   console.log(`${key}: name, description and picture updated`);
 }
+// Its name and description in the other languages (the game must support them: game-page.mjs turns them on)
+async function translate(kind, id, p) {
+  for (const lang of LANGS.slice(1)) {
+    const t = p.text(lang), key = `${kind}.${p.id}.${lang}`;
+    const h = createHash('sha256').update(t.name + '\n' + t.description).digest('hex');
+    if (sent[key] === h) continue;
+    const path = kind === 'pass' ? `game-passes/${id}` : `developer-products/${id}`;
+    // Roblox sometimes answers 500 for a moment: try again a few times
+    let res;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      res = await fetch(`https://apis.roblox.com/legacy-game-internationalization/v1/${path}/name-description/language-codes/${lang}`, {
+        method: 'PATCH', headers: { 'x-api-key': key_, 'content-type': 'application/json' }, body: JSON.stringify(t),
+      });
+      if (res.status < 500 && res.status !== 429) break;
+      await new Promise(r => setTimeout(r, 2000 * 2 ** attempt));
+    }
+    if (!res.ok) { console.error(`${key}: ${res.status} ${(await res.text()).slice(0, 200)}`); failed++; continue; }
+    sent[key] = h;
+    writeFileSync(ART, JSON.stringify(sent, null, 2) + '\n');
+    console.log(`${key}: translated`);
+  }
+}
 
 const ids = { passes: {}, products: {} };
 // Ids already written (keep them)
@@ -91,6 +103,7 @@ try {
     if (!(ids.passes[p.id] > 0)) continue;
     try { await refresh('pass', `https://apis.roblox.com/game-passes/v1/universes/${universe}/game-passes/${ids.passes[p.id]}`, p); }
     catch (e) { console.error(`pass ${p.id}: ${e.message}`); failed++; }
+    await translate('pass', ids.passes[p.id], p);
   }
 } catch (e) { console.error(`Game passes: ${e.message}`); failed++; }
 
@@ -111,6 +124,7 @@ try {
     if (!(ids.products[p.id] > 0)) continue;
     try { await refresh('product', `${base}/${ids.products[p.id]}`, p); }
     catch (e) { console.error(`product ${p.id}: ${e.message}`); failed++; }
+    await translate('product', ids.products[p.id], p);
   }
 } catch (e) { console.error(`Developer products: ${e.message}`); failed++; }
 

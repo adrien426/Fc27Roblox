@@ -26,12 +26,17 @@ page.on('pageerror', e => console.log('[err]', e.message));
 await page.goto('http://localhost:8765/page.html');
 await page.waitForFunction(() => window.ready && window.SCENES, null, { timeout: 120000 });
 const list = await page.evaluate(() => Object.keys(window.SCENES));
+// The thumbnails have titles: one picture per language (thumb1.png in French, thumb1.en.png...)
+const { LANGS, THUMB_TITLES } = await import('../store-text.mjs');
 for (const name of list) {
   if (only && !only.includes(name)) continue;
-  const [w, h] = await page.evaluate(async n => await window.SCENES[n].run(), name);
-  await page.setViewportSize({ width: w, height: h });
-  await page.waitForTimeout(400);
-  await page.locator('#stage').screenshot({ path: `${out}/${name}.png`, omitBackground: true });
-  console.log('shot', name, w, h);
+  for (const lang of name.startsWith('thumb') ? LANGS : ['fr']) {
+    const [w, h] = await page.evaluate(async ([n, t]) => await window.SCENES[n].run(t), [name, THUMB_TITLES[lang]]);
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(400);
+    const file = lang === 'fr' ? `${name}.png` : `${name}.${lang}.png`;
+    await page.locator('#stage').screenshot({ path: `${out}/${file}`, omitBackground: true });
+    console.log('shot', file, w, h);
+  }
 }
 await browser.close(); srv.close();

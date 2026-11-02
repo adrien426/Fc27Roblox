@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
 local Net = ReplicatedStorage:WaitForChild("Net")
 
 local player = Players.LocalPlayer
@@ -150,7 +151,7 @@ local function play(goalT: number)
 	tag.Position = UDim2.new(0.5, 0, 0.07, 0)
 	tag.Size = UDim2.fromOffset(200, 30)
 	tag.BackgroundColor3 = Color3.fromRGB(200, 30, 40)
-	tag.Text = "● RALENTI"
+	tag.Text = Lang.t("replay.tag")
 	tag.TextColor3 = Color3.new(1, 1, 1)
 	tag.Font = Enum.Font.GothamBlack
 	tag.TextSize = 18
@@ -161,7 +162,7 @@ local function play(goalT: number)
 	skip.Position = UDim2.new(1, -20, 0.92, 0)
 	skip.Size = UDim2.fromOffset(120, 38)
 	skip.BackgroundColor3 = Color3.fromRGB(242, 194, 48)
-	skip.Text = "Passer  »"
+	skip.Text = Lang.t("btn.skip")
 	skip.Font = Enum.Font.GothamBlack
 	skip.TextSize = 16
 	skip.TextColor3 = Color3.fromRGB(14, 24, 18)

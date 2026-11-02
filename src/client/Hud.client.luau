@@ -7,6 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local Version = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Version")) :: string
+local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang"))
+local t = Lang.t
 local Net = ReplicatedStorage:WaitForChild("Net")
 local Message = Net:WaitForChild("Message") :: RemoteEvent
 
@@ -45,7 +47,7 @@ local function teamTag(i: number, x: number)
 	bar.BackgroundColor3 = Config.TEAMS[i].color
 	bar.BorderSizePixel = 0
 	bar.Parent = board
-	label(board, { Size = UDim2.fromOffset(46, 40), Position = UDim2.fromOffset(x + 8, 0), Text = Config.TEAMS[i].abbr, TextSize = 18 })
+	label(board, { Size = UDim2.fromOffset(46, 40), Position = UDim2.fromOffset(x + 8, 0), Text = t("abbr." .. i), TextSize = 18 })
 end
 teamTag(1, 8)
 local scoreText = label(board, { Size = UDim2.fromOffset(80, 30), Position = UDim2.fromOffset(66, 5), Text = "0 – 0", TextSize = 22, BackgroundTransparency = 0, BackgroundColor3 = Color3.new(1, 1, 1), TextColor3 = DARK })
@@ -59,7 +61,7 @@ clockBox.BackgroundTransparency = 0.15
 clockBox.Parent = gui
 Instance.new("UICorner", clockBox).CornerRadius = UDim.new(0, 6)
 local clockText = label(clockBox, { Size = UDim2.fromOffset(92, 26), Position = UDim2.fromOffset(0, 1), Text = "⏱ 0’", TextSize = 18, TextColor3 = Color3.fromRGB(242, 194, 48) })
-local halfText = label(clockBox, { Size = UDim2.fromOffset(92, 12), Position = UDim2.fromOffset(0, 26), Text = "1re mi-temps", TextSize = 10,
+local halfText = label(clockBox, { Size = UDim2.fromOffset(92, 12), Position = UDim2.fromOffset(0, 26), Text = t("hud.half1"), TextSize = 10,
 	Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(190, 196, 206) })
 
 -- Commentary: a line at the bottom of the screen, like the web game's commentator (Net attribute Comment)
@@ -73,7 +75,7 @@ Net:GetAttributeChangedSignal("CommentAt"):Connect(function()
 	if type(text) ~= "string" then return end
 	commentSerial += 1
 	local mine = commentSerial
-	commentBox.Text = text
+	commentBox.Text = Lang.show(text)
 	commentBox.Visible = true
 	task.delay(3.2, function() if commentSerial == mine then commentBox.Visible = false end end)
 end)
@@ -97,9 +99,9 @@ local function refresh()
 	local half = Net:GetAttribute("Half") or 1
 	local base = if half == 1 then 45 else 90
 	clockText.Text = "⏱ " .. (if c >= base then string.format("%d+%d’", base, c - base + 1) else string.format("%d’", c))
-	halfText.Text = if half == 1 then "1re mi-temps" else "2e mi-temps"
-	if Net:GetAttribute("Phase") == "break" then clockText.Text = "⏱ MT"; halfText.Text = "mi-temps" end
-	if Net:GetAttribute("Phase") == "done" then halfText.Text = "terminé" end
+	halfText.Text = if half == 1 then t("hud.half1") else t("hud.half2")
+	if Net:GetAttribute("Phase") == "break" then clockText.Text = "⏱ " .. t("hud.ht"); halfText.Text = t("say.half") end
+	if Net:GetAttribute("Phase") == "done" then halfText.Text = t("hud.over") end
 end
 for _, k in { "Score1", "Score2", "Clock", "Half", "Phase" } do Net:GetAttributeChangedSignal(k):Connect(refresh) end
 refresh()
@@ -108,9 +110,9 @@ refresh()
 local me = label(gui, { Size = UDim2.fromOffset(300, 20), Position = UDim2.new(0, 12, 0, 52), Text = "", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBold })
 local function refreshMe()
 	local char = player.Character
-	local t = char and char:GetAttribute("Team")
-	me.Text = if type(t) == "number" and Config.TEAMS[t] then "Tu joues pour les " .. Config.TEAMS[t].name else "Spectateur"
-	me.TextColor3 = if type(t) == "number" and Config.TEAMS[t] then Config.TEAMS[t].color:Lerp(Color3.new(1, 1, 1), 0.35) else Color3.new(1, 1, 1)
+	local tm = char and char:GetAttribute("Team")
+	me.Text = if type(tm) == "number" and Config.TEAMS[tm] then t("hud.youplay", { team = Lang.team(tm) }) else t("hud.spectator")
+	me.TextColor3 = if type(tm) == "number" and Config.TEAMS[tm] then Config.TEAMS[tm].color:Lerp(Color3.new(1, 1, 1), 0.35) else Color3.new(1, 1, 1)
 end
 player.CharacterAdded:Connect(function(char)
 	char:GetAttributeChangedSignal("Team"):Connect(refreshMe)
@@ -131,9 +133,9 @@ local mainText = label(banner, { Size = UDim2.new(1, 0, 0, 60), Text = "", TextS
 local subText = label(banner, { Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 60), Text = "", TextSize = 20, Font = Enum.Font.GothamBold, TextStrokeTransparency = 0.5 })
 local bannerUntil = 0
 Message.OnClientEvent:Connect(function(text: any, sub: any, dur: any)
-	mainText.Text = tostring(text)
-	subText.Text = tostring(sub or "")
-	mainText.TextSize = if #tostring(text) > 12 then 36 else 52
+	mainText.Text = Lang.show(text)
+	subText.Text = Lang.show(sub or "")
+	mainText.TextSize = if (utf8.len(mainText.Text) or 0) > 12 then 36 else 52
 	banner.Visible = true
 	bannerUntil = os.clock() + (tonumber(dur) or 2)
 end)
@@ -171,17 +173,15 @@ stamFill.Parent = stam
 -- Key list on computers
 if not UserInputService.TouchEnabled or UserInputService.KeyboardEnabled then
 	local keys = Instance.new("Frame")
-	keys.Size = UDim2.fromOffset(250, 150)
+	keys.Size = UDim2.fromOffset(360, 150)
 	keys.AnchorPoint = Vector2.new(0, 1)
 	keys.Position = UDim2.new(0, 12, 1, -12)
 	keys.BackgroundColor3 = DARK
 	keys.BackgroundTransparency = 0.3
 	keys.Parent = gui
 	Instance.new("UICorner", keys).CornerRadius = UDim.new(0, 6)
-	local lines = {
-		"ZQSD / WASD  Courir", "J  Passe", "K  Tir (maintenir = puissance)", "I  Lob (maintenir = loin et haut)",
-		"L  Passe en profondeur", "E  Tacle · Maj  Sprint", "Espace  Saut (tête) · C  Caméra TV",
-	}
+	local lines = {}
+	for i = 1, 7 do table.insert(lines, t("keys." .. i)) end
 	for i, s in lines do
 		label(keys, { Size = UDim2.new(1, -16, 0, 18), Position = UDim2.fromOffset(8, 6 + (i - 1) * 20), Text = s, TextSize = 14, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
 	end
@@ -195,7 +195,7 @@ RunService.RenderStepped:Connect(function()
 		power.Visible = true
 		fill.Size = UDim2.fromScale(ch, 1)
 		fill.BackgroundColor3 = if kind == "lob" then Color3.fromRGB(127, 212, 255) elseif ch > 0.82 then Color3.fromRGB(255, 90, 60) else Color3.fromRGB(242, 194, 48)
-		powerLab.Text = if kind == "lob" then "Lob" else (if ch > 0.82 then "Tir · trop fort, risque au-dessus" else "Tir")
+		powerLab.Text = if kind == "lob" then t("hud.lob") else (if ch > 0.82 then t("hud.shotstrong") else t("hud.shot"))
 	else
 		power.Visible = false
 	end
