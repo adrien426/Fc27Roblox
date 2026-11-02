@@ -13,12 +13,12 @@ return {
 	},
 	-- The shop's pictures (decals), shown as rbxthumb://type=Asset&id=...
 	art = {
-		celebrations = 0,
-		style = 0,
-		vip = 0,
-		trail = 0,
-		coins500 = 0,
-		coins1500 = 0,
-		coins5000 = 0,
+		celebrations = 126690707640780,
+		style = 138281138776883,
+		vip = 81669267564792,
+		trail = 79077480470837,
+		coins500 = 77591651434819,
+		coins1500 = 125450251810823,
+		coins5000 = 129387775565413,
 	},
 }
