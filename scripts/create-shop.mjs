@@ -61,9 +61,15 @@ async function translate(kind, id, p) {
     const h = createHash('sha256').update(t.name + '\n' + t.description).digest('hex');
     if (sent[key] === h) continue;
     const path = kind === 'pass' ? `game-passes/${id}` : `developer-products/${id}`;
-    const res = await fetch(`https://apis.roblox.com/legacy-game-internationalization/v1/${path}/name-description/language-codes/${lang}`, {
-      method: 'PATCH', headers: { 'x-api-key': key_, 'content-type': 'application/json' }, body: JSON.stringify(t),
-    });
+    // Roblox sometimes answers 500 for a moment: try again a few times
+    let res;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      res = await fetch(`https://apis.roblox.com/legacy-game-internationalization/v1/${path}/name-description/language-codes/${lang}`, {
+        method: 'PATCH', headers: { 'x-api-key': key_, 'content-type': 'application/json' }, body: JSON.stringify(t),
+      });
+      if (res.status < 500 && res.status !== 429) break;
+      await new Promise(r => setTimeout(r, 2000 * 2 ** attempt));
+    }
     if (!res.ok) { console.error(`${key}: ${res.status} ${(await res.text()).slice(0, 200)}`); failed++; continue; }
     sent[key] = h;
     writeFileSync(ART, JSON.stringify(sent, null, 2) + '\n');
