@@ -117,7 +117,7 @@ jobs:
 
       - name: Check the Luau code and build the place
         run: |
-          echo "return \"${GITHUB_SHA::7} · $(date -u +%d/%m %H:%M)\"" > src/shared/Version.luau
+          echo "return \"${GITHUB_SHA::7} · $(date -u '+%d/%m %H:%M')\"" > src/shared/Version.luau
           tools/rojo sourcemap default.project.json -o sourcemap.json
           tools/luau-lsp analyze --definitions=tools/globalTypes.d.luau --sourcemap=sourcemap.json src
           tools/rojo build default.project.json -o Fc27.rbxlx
