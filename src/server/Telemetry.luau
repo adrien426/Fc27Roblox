@@ -99,9 +99,13 @@ Report.OnServerEvent:Connect(function(pl: Player, kind: any, data: any)
 	if kind ~= "error" and kind ~= "replay" then return end
 	local m = math.floor(os.clock() / 60)
 	local c = perPlayer[pl]
-	if not c or c.m ~= m then c = { n = 0, m = m }; perPlayer[pl] = c end
-	c.n += 1
-	if c.n > 6 then return end
+	if not c or c.m ~= m then
+		c = { n = 0, m = m }
+		perPlayer[pl] = c
+	end
+	local cc = c :: { n: number, m: number }
+	cc.n += 1
+	if cc.n > 6 then return end
 	Telemetry.log("client." .. kind, data, pl)
 end)
 Players.PlayerRemoving:Connect(function(pl) perPlayer[pl] = nil end)
