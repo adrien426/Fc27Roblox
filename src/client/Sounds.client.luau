@@ -105,7 +105,8 @@ local tts: any = nil
 pcall(function()
 	local t: any = (Instance.new :: any)("AudioTextToSpeech") -- newer than the type definitions
 	t.VoiceId = Lang.VOICE[Lang.current()] or "1"
-	pcall(function() t.AutoLocalize = false end)
+	-- Another language than the six: Roblox translates the French commentary and picks the voice
+	pcall(function() t.AutoLocalize = not Lang.native() end)
 	t.Volume = 1.6
 	t.Speed = 1.08
 	t.Parent = SoundService

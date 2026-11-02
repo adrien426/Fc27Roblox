@@ -1,8 +1,9 @@
 --!strict
 -- Shows every text of the game in this player's language (shared/Lang): any text label whose text is a coded message
 -- from the server ("§key|args": the locker-room signs, the scorers board, the labels over the footballers' heads...)
--- is turned into this player's language, here and whenever it changes. Roblox's own automatic translation is switched
--- off on the game's screens and signs: the texts are already translated, and players' names must stay as they are.
+-- is turned into this player's language, here and whenever it changes. For the six languages of shared/Lang, Roblox's
+-- own automatic translation is switched off on the game's screens and signs: the texts are already translated, and
+-- players' names must stay as they are. For any other language it stays on and translates the French texts.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,7 +11,8 @@ local Lang = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Lang
 
 local function handle(d: Instance)
 	if d:IsA("LayerCollector") then
-		pcall(function() (d :: any).AutoLocalize = false end)
+		-- Our own translations for the six languages; for any other, Roblox translates the French texts
+		if Lang.native() then pcall(function() (d :: any).AutoLocalize = false end) end
 	elseif d:IsA("TextLabel") or d:IsA("TextButton") then
 		local t = d :: any
 		local function fix()
