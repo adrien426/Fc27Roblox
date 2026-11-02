@@ -98,14 +98,14 @@ local function render()
 			row.Position = UDim2.fromOffset(6, 32 + (i - 1) * 23)
 			row.AutoButtonColor = true
 			row.Text = ""
-			local free = not p.human and p.role ~= "GK"
+			local free = not p.human
 			row.BackgroundColor3 = if p.human then Color3.fromRGB(90, 70, 20) elseif free then Color3.fromRGB(40, 56, 48) else Color3.fromRGB(34, 38, 42)
 			row.Parent = col
 			Instance.new("UICorner", row).CornerRadius = UDim.new(0, 5)
 			label(row, { Size = UDim2.new(0.62, 0, 1, 0), Position = UDim2.fromOffset(6, 0), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left,
 				Text = `{p.num}  {ROLE[p.role] or p.role}`, TextColor3 = if free then Color3.new(1, 1, 1) else Color3.fromRGB(170, 176, 184) })
 			label(row, { Size = UDim2.new(0.38, -6, 1, 0), Position = UDim2.new(0.62, 0, 0, 0), TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right,
-				Text = if p.human then (if p.vip then "★ " else "") .. p.name elseif p.role == "GK" then "robot" else "libre  »",
+				Text = if p.human then (if p.vip then "★ " else "") .. p.name else "libre  »",
 				TextColor3 = if p.human then GOLD elseif free then Color3.fromRGB(140, 230, 150) else Color3.fromRGB(150, 150, 150) })
 			if free then
 				row.Activated:Connect(function()

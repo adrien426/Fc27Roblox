@@ -17,7 +17,7 @@ if (!key || !universe) { console.error('ROBLOX_API_KEY and ROBLOX_UNIVERSE_ID mu
 const PASSES = [
   { id: 'celebrations', name: 'FC27 Célébrations', description: 'Ta célébration après chaque but : Siuu, danse, victoire…', price: 99 },
   { id: 'style', name: 'FC27 Crampons et maillots', description: 'Crampons de couleur et maillots en édition spéciale.', price: 149 },
-  { id: 'vip', name: 'FC27 Pass VIP', description: 'Nom en doré, coin VIP au vestiaire, poste de gardien.', price: 299 },
+  { id: 'vip', name: 'FC27 Pass VIP', description: 'Nom en doré et accès au coin VIP du vestiaire.', price: 299 },
   { id: 'trail', name: 'FC27 Effet de tir', description: 'Une traînée de feu, d’étoiles ou de glace derrière le ballon sur tes frappes.', price: 149 },
 ];
 const PACKS = [
